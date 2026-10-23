@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import bcrypt from "bcryptjs";
 import { DEFAULT_SETTINGS, type FarmSettings } from "@farm/domain";
 import { DATABASE, type Database } from "../db/database";
+import { hashPassword } from "../common/password";
 import { farmMembers, farmSettings, farms, users } from "../db/schema";
 import { toSettings } from "../common/mappers";
 import type { AddMemberDto, UpdateSettingsDto } from "./farms.dto";
@@ -134,7 +134,7 @@ export class FarmsService {
       await this.db.insert(users).values({
         id: userId,
         email,
-        passwordHash: await bcrypt.hash(dto.password, 11),
+        passwordHash: await hashPassword(dto.password),
         name: (dto.name ?? email.split("@")[0]).slice(0, 80),
         phone: dto.phone?.slice(0, 20) ?? null,
         // مزرعه اصلی و نقش اولیه همان مزرعه‌ای است که کاربر به آن اضافه می‌شود

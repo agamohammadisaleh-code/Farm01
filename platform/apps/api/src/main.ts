@@ -9,7 +9,31 @@ import { AppModule } from "./app.module";
 import { runMigrations } from "./db/migrate";
 import { DATABASE, type Database } from "./db/database";
 
+/**
+ * پیش‌شرط‌های امنیتی استقرار.
+ *
+ * مقادیر پیش‌فرض توسعه (رمز JWT نمونه، CORS باز) فقط برای اجرای محلی است.
+ * اگر در تولید با همان مقادیر بالا بیاید، به‌جای «کار کردن با تنظیم ناامن»
+ * باید همان لحظه و با صدای بلند شکست بخورد.
+ */
+function assertDeploySafety() {
+  const isProduction = process.env.NODE_ENV === "production";
+  const problems: string[] = [];
+  const secret = process.env.JWT_SECRET ?? "";
+  if (isProduction && (secret === "" || secret === "dev-only-secret-change-me" || secret.length < 32)) {
+    problems.push("JWT_SECRET تنظیم نشده یا کوتاه است (حداقل ۳۲ نویسه).");
+  }
+  const origins = process.env.CORS_ORIGINS ?? "";
+  if (isProduction && (origins.trim() === "" || origins.split(",").some((o) => o.trim() === "*"))) {
+    problems.push("CORS_ORIGINS در تولید باید فهرست دقیق دامنه‌ها باشد، نه خالی و نه *.");
+  }
+  if (problems.length > 0) {
+    throw new Error(`پیکربندی ناامن برای تولید:\n- ${problems.join("\n- ")}`);
+  }
+}
+
 async function bootstrap() {
+  assertDeploySafety();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: false });
 
   // مهاجرت‌ها پیش از پذیرش درخواست اجرا می‌شوند (idempotent)

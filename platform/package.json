@@ -27,7 +27,8 @@
     "typecheck:web": "npm run typecheck -w @farm/web",
     "test:web": "npm run test -w @farm/web",
     "docs:schema": "tsx scripts/dump-schema.mts",
-    "docs:openapi": "node scripts/fetch-openapi.mjs"
+    "docs:openapi": "node scripts/fetch-openapi.mjs",
+    "check:security": "tsx scripts/check-guards.mts"
   },
   "devDependencies": {
     "react": "18.3.1",

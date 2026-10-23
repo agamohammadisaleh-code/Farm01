@@ -5,6 +5,7 @@ import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto, SwitchFarmDto, Up
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { CurrentUser } from "./current-user.decorator";
 import type { AuthUser } from "./auth.types";
+import { AUTH_LIMITS, RateLimit } from "../common/rate-limit";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -12,18 +13,23 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post("register")
+  @RateLimit(AUTH_LIMITS.registerIp)
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
   }
 
   @Post("login")
   @HttpCode(200)
+  // دو سبد: یکی برای خود حساب (ضد حملهٔ حدس گذرواژه) و یکی برای نشانی
+  // شبکه (ضد پخش حمله روی چند حساب از یک ماشین).
+  @RateLimit(AUTH_LIMITS.loginAccount, AUTH_LIMITS.loginIp)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
   }
 
   @Post("refresh")
   @HttpCode(200)
+  @RateLimit(AUTH_LIMITS.refreshIp)
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken);
   }
@@ -52,6 +58,7 @@ export class AuthController {
   @ApiBearerAuth()
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
+  @RateLimit(AUTH_LIMITS.passwordIp)
   changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
     return this.auth.changePassword(user.id, dto.currentPassword, dto.newPassword);
   }

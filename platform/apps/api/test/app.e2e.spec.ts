@@ -1346,4 +1346,24 @@ describe("Farm API (e2e)", () => {
       await request(server).post(`/api/v1/flocks/${active.id}/close`).set(auth(workerToken)).send({}).expect(403);
     });
   });
+
+  describe("محدودسازی نرخ ورود (بخش ۱۰)", () => {
+    it("تلاش‌های پی‌درپی حدس گذرواژه برای یک حساب قفل می‌شود", async () => {
+      const email = "ghost@farm.ir";
+      const perAccount = 5;
+      for (let i = 0; i < perAccount; i += 1) {
+        await request(server).post("/api/v1/auth/login").send({ email, password: "WrongPass1" }).expect(401);
+      }
+      const blocked = await request(server)
+        .post("/api/v1/auth/login")
+        .send({ email, password: "WrongPass1" })
+        .expect(429);
+      expect(blocked.body.message).toContain("بیش از حد مجاز");
+      expect(blocked.headers["retry-after"]).toBeDefined();
+    });
+
+    it("قفل یک حساب، ورود حساب دیگر را نمی‌بندد", async () => {
+      await request(server).post("/api/v1/auth/login").send({ email: "vet@farm.ir", password: "VetPass1234" }).expect(200);
+    });
+  });
 });

@@ -18,11 +18,11 @@ platform/
 
 ## مستندات معماری
 
-سند معماری با هفت بخش در [`docs/architecture/`](./docs/architecture/README.md):
+سند معماری با هشت بخش در [`docs/architecture/`](./docs/architecture/README.md):
 
 | بخش | فایل |
 |---|---|
-| معماری کلی، ساختار پوشه‌ها، کد سه ماژول، طرح صفحه، نقشه راه | [`docs/architecture/README.md`](./docs/architecture/README.md) |
+| معماری کلی، ساختار پوشه‌ها، کد سه ماژول، طرح صفحه، نقشه راه، محدودیت‌ها و امنیت | [`docs/architecture/README.md`](./docs/architecture/README.md) |
 | طرح پایگاه‌داده (DDL تولیدشده از پایگاه‌داده واقعی) | [`docs/architecture/schema.sql`](./docs/architecture/schema.sql) |
 | مشخصات OpenAPI (تولیدشده از سرور در حال اجرا) | [`docs/architecture/openapi.yaml`](./docs/architecture/openapi.yaml) |
 
@@ -31,6 +31,7 @@ platform/
 ```bash
 npm run docs:schema                                  # DDL از مهاجرت‌ها
 API_URL=http://127.0.0.1:4000 npm run docs:openapi    # از /api/docs-json
+npm run check:security                               # قواعد RBAC/اعتبارسنجی/هش (در CI)
 ```
 
 ---

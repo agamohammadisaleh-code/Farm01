@@ -36,6 +36,9 @@ jobs:
       - name: بررسی نوع‌های اپ موبایل
         run: npm run typecheck:mobile
 
+      - name: بررسی قواعد امنیتی و معماری
+        run: npm run check:security
+
       - name: تست دامنه، API و وب
         run: npm test
 

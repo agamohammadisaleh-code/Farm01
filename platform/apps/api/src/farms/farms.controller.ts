@@ -16,6 +16,9 @@ export class FarmsController {
   constructor(private readonly service: FarmsService) {}
 
   @Get()
+  // صریح نوشته می‌شود تا «هیچ مسیری بدون تصمیم نقش» باقی نماند؛
+  // همه نقش‌ها اجازه خواندن مزرعه فعال خود را دارند.
+  @Roles("owner", "manager", "worker", "vet")
   get(@CurrentUser() user: AuthUser) {
     return this.service.get(user.farmId);
   }

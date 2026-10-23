@@ -15,10 +15,10 @@
  */
 import "reflect-metadata";
 import { Logger } from "@nestjs/common";
-import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { createDatabase, type Database } from "./database";
 import { runMigrations, resolveMigrationsDir } from "./migrate";
+import { hashPassword } from "../common/password";
 import {
   dailyLogs,
   expenses,
@@ -123,7 +123,7 @@ async function reset(db: Database) {
 }
 
 export async function seed(db: Database) {
-  const passwordHash = await bcrypt.hash(SEED_PASSWORD, 11);
+  const passwordHash = await hashPassword(SEED_PASSWORD);
 
   const existing = await db.db.select({ id: users.id }).from(users).where(eq(users.email, SEED_EMAIL)).limit(1);
   if (existing.length > 0) {

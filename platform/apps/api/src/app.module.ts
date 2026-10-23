@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./auth/auth.module";
 import { FlocksModule } from "./flocks/flocks.module";
@@ -17,6 +18,7 @@ import { FarmsModule } from "./farms/farms.module";
 import { AssistantModule } from "./assistant/assistant.module";
 import { SyncModule } from "./sync/sync.module";
 import { DatabaseModule } from "./db/db.module";
+import { RateLimitGuard } from "./common/rate-limit";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -41,5 +43,10 @@ import { HealthController } from "./health.controller";
     SyncModule,
   ],
   controllers: [HealthController],
+  providers: [
+    // ترمز نرخ درخواست برای همه مسیرها؛ قواعد سخت‌گیرانه‌تر با
+    // `@RateLimit(...)` روی مسیرهای احراز هویت اضافه می‌شود.
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+  ],
 })
 export class AppModule {}

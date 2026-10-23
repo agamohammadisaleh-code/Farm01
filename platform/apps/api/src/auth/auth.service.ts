@@ -6,11 +6,11 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { and, eq, isNull } from "drizzle-orm";
-import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "node:crypto";
 import type { Role } from "@farm/domain";
 import { DEFAULT_SETTINGS } from "@farm/domain";
 import { DATABASE, type Database } from "../db/database";
+import { dummyPasswordHash, hashPassword, verifyPassword } from "../common/password";
 import { farmMembers, farmSettings, farms, refreshTokens, users } from "../db/schema";
 import type { JwtPayload } from "./auth.types";
 
@@ -80,7 +80,7 @@ export class AuthService {
 
     const userId = randomUUID();
     const farmId = randomUUID();
-    const passwordHash = await bcrypt.hash(input.password, 11);
+    const passwordHash = await hashPassword(input.password);
 
     await this.db.transaction(async (tx: any) => {
       await tx.insert(farms).values({
@@ -119,9 +119,13 @@ export class AuthService {
   async login(email: string, password: string) {
     const rows = await this.db.select().from(users).where(eq(users.email, email.trim().toLowerCase())).limit(1);
     const user = rows[0];
-    if (!user || !user.isActive) throw new UnauthorizedException("ایمیل یا گذرواژه نادرست است.");
+    if (!user || !user.isActive) {
+      // زمان پاسخ برای ایمیل ناموجود هم اندازه ایمیل موجود است
+      await verifyPassword(password, await dummyPasswordHash());
+      throw new UnauthorizedException("ایمیل یا گذرواژه نادرست است.");
+    }
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException("ایمیل یا گذرواژه نادرست است.");
 
     const membership = await this.firstMembership(user.id);
@@ -216,13 +220,13 @@ export class AuthService {
     const rows = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user) throw new UnauthorizedException("کاربر یافت نشد.");
-    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    const ok = await verifyPassword(currentPassword, user.passwordHash);
     if (!ok) throw new UnauthorizedException("گذرواژه فعلی نادرست است.");
 
     await this.db.transaction(async (tx: any) => {
       await tx
         .update(users)
-        .set({ passwordHash: await bcrypt.hash(newPassword, 11), updatedAt: new Date() })
+        .set({ passwordHash: await hashPassword(newPassword), updatedAt: new Date() })
         .where(eq(users.id, userId));
       await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, userId));
     });
