@@ -81,7 +81,7 @@ function sellAdvice(ctx: AdvisorContext): string {
     lines.push(`- وزن زنده فعلی: **${num(m.currentWeightG)} گرم** (${m.weightVsStdPct >= 0 ? "+" : "−"}${one(Math.abs(m.weightVsStdPct))}٪ نسبت به استاندارد نژاد)`);
     lines.push(`- توده زنده: ${num(m.liveBirds)} قطعه، ${num(m.liveBiomassKg)} کیلوگرم`);
     lines.push(`- سود در صورت فروش امروز: **${compactToman(nowProfit)}**`);
-    lines.push(`- سود پیش‌بینی‌شده تا سن هدف (${m.projection.targetAge} روز): **${compactToman(waitProfit)}**`);
+    lines.push(`- سود پیش‌بینی‌شده تا سن هدف (${faDigits(m.projection.targetAge)} روز): **${compactToman(waitProfit)}**`);
     lines.push(
       `- ارزش رشد یک روز صبر کردن: حدود ${money(dailyRevenue)} درآمد در برابر ${money(dailyFeedCost)} هزینه دان و سرباز ≈ **${money(marginal)} سود نهایی روزانه**`,
     );
@@ -95,7 +95,7 @@ function sellAdvice(ctx: AdvisorContext): string {
       }
     } else if (m.currentWeightG >= m.targetWeightG * 0.85) {
       verdict = marginal > 0
-        ? `گله در آستانه وزن هدف است. با رشد روزانه ${num(gainPerKg)} گرم و حاشیه مثبت، صبر تا ${m.projection.targetAge} روزگی منطقی است؛ اما با پایش روزانه قیمت.`
+        ? `گله در آستانه وزن هدف است. با رشد روزانه ${num(gainPerKg)} گرم و حاشیه مثبت، صبر تا ${faDigits(m.projection.targetAge)} روزگی منطقی است؛ اما با پایش روزانه قیمت.`
         : `گله نزدیک وزن هدف است اما حاشیه رشد روزانه منفی شده. فروش سریع‌تر بررسی شود.`;
     } else {
       verdict = `گله هنوز ${num(m.targetWeightG - m.currentWeightG)} گرم با وزن هدف فاصله دارد. فروش زودهنگام به ازای هر کیلوگرم زیان احتمالی دارد؛ تمرکز بر رشد و کنترل تلفات تا رسیدن به وزن هدف.`;
