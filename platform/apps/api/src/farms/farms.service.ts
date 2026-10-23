@@ -50,6 +50,7 @@ export class FarmsService {
         targetAgeDays: DEFAULT_SETTINGS.target_age_days,
         defaultBreed: DEFAULT_SETTINGS.default_breed,
         timezone: DEFAULT_SETTINGS.timezone,
+        feedAlertDays: DEFAULT_SETTINGS.feed_alert_days ?? 3,
       });
     });
     return this.get(farmId);
@@ -66,6 +67,7 @@ export class FarmsService {
         targetAgeDays: DEFAULT_SETTINGS.target_age_days,
         defaultBreed: DEFAULT_SETTINGS.default_breed,
         timezone: DEFAULT_SETTINGS.timezone,
+        feedAlertDays: DEFAULT_SETTINGS.feed_alert_days ?? 3,
       });
       return this.settings(farmId);
     }
@@ -88,6 +90,7 @@ export class FarmsService {
         targetWeightG: dto.targetWeightG ?? current.target_weight_g,
         targetAgeDays: dto.targetAgeDays ?? current.target_age_days,
         defaultBreed: dto.defaultBreed?.slice(0, 60) ?? current.default_breed,
+        feedAlertDays: dto.feedAlertDays ?? current.feed_alert_days ?? 3,
         updatedAt: new Date(),
       })
       .where(eq(farmSettings.farmId, farmId));
@@ -143,6 +146,38 @@ export class FarmsService {
 
     await this.db.insert(farmMembers).values({ farmId, userId, role: dto.role });
     return { ok: true, userId };
+  }
+
+  /**
+   * تغییر نقش عضو. نقش «مالک» از این مسیر قابل واگذاری نیست؛
+   * انتقال مالکیت باید عملیات جداگانه‌ای باشد تا تصادفی انجام نشود.
+   */
+  async updateMemberRole(farmId: string, actorId: string, userId: string, role: "manager" | "worker" | "vet") {
+    const rows = await this.db
+      .select()
+      .from(farmMembers)
+      .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId)))
+      .limit(1);
+    if (!rows[0]) throw new NotFoundException("عضویت یافت نشد.");
+    if (rows[0].role === "owner") throw new BadRequestException("نقش مالک قابل تغییر نیست.");
+    if (userId === actorId) throw new BadRequestException("نقش خودتان را نمی‌توانید تغییر دهید.");
+
+    await this.db
+      .update(farmMembers)
+      .set({ role })
+      .where(and(eq(farmMembers.farmId, farmId), eq(farmMembers.userId, userId)));
+    // نقش اصلی کاربر همان مزرعه هم هم‌تراز می‌شود تا مجوزها یکسان بمانند
+    await this.db.update(users).set({ role }).where(and(eq(users.id, userId), eq(users.farmId, farmId)));
+    return this.members(farmId);
+  }
+
+  /** ویرایش نام و موقعیت مزرعه */
+  async updateFarm(farmId: string, dto: { name?: string; location?: string }) {
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (dto.name !== undefined) patch.name = dto.name.trim().slice(0, 80);
+    if (dto.location !== undefined) patch.location = dto.location.trim().slice(0, 120) || null;
+    await this.db.update(farms).set(patch).where(eq(farms.id, farmId));
+    return this.get(farmId);
   }
 
   async removeMember(farmId: string, userId: string) {

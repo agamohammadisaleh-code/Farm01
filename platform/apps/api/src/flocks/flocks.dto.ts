@@ -30,3 +30,7 @@ export class UpdateFlockDto {
   @IsOptional() @IsIn(["active", "closed"]) status?: "active" | "closed";
   @IsOptional() @IsString() @MaxLength(500) notes?: string;
 }
+
+export class CloseFlockDto {
+  @IsOptional() @Matches(DATE, { message: "تاریخ پایان معتبر نیست." }) closedDate?: string;
+}

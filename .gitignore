@@ -16,3 +16,9 @@ platform/**/dist/
 platform/**/dist-test/
 platform/.pgdata/
 platform/.env
+
+# سرویس پایتون
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

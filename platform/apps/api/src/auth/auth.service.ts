@@ -197,6 +197,38 @@ export class AuthService {
     );
   }
 
+  /** ویرایش پروفایل شخصی — نام و شماره تماس */
+  async updateProfile(userId: string, dto: { name?: string; phone?: string }) {
+    const patch: Record<string, unknown> = {};
+    if (dto.name !== undefined) patch.name = dto.name.trim().slice(0, 80);
+    if (dto.phone !== undefined) patch.phone = dto.phone.trim().slice(0, 20) || null;
+    if (Object.keys(patch).length === 0) return this.me(userId);
+    patch.updatedAt = new Date();
+    await this.db.update(users).set(patch).where(eq(users.id, userId));
+    return this.me(userId);
+  }
+
+  /**
+   * تغییر گذرواژه. پس از تغییر، همه توکن‌های تازه‌سازی کاربر باطل می‌شوند
+   * تا اگر گذرواژه به دست کسی افتاده بود، نشست‌های قبلی قطع شوند.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const rows = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const user = rows[0];
+    if (!user) throw new UnauthorizedException("کاربر یافت نشد.");
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) throw new UnauthorizedException("گذرواژه فعلی نادرست است.");
+
+    await this.db.transaction(async (tx: any) => {
+      await tx
+        .update(users)
+        .set({ passwordHash: await bcrypt.hash(newPassword, 11), updatedAt: new Date() })
+        .where(eq(users.id, userId));
+      await tx.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, userId));
+    });
+    return { ok: true };
+  }
+
   async me(userId: string) {
     const rows = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
     const user = rows[0];

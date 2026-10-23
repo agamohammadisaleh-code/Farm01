@@ -44,7 +44,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET را در .env تعیین کنید}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       REDIS_URL: redis://redis:6379
-      AI_SERVICE_URL: http://ai:8000
+      AI_URL: http://ai:8000
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-2500}
+      AI_API_KEY: ${AI_API_KEY:-}
     ports:
       - "4000:4000"
     depends_on:
@@ -53,6 +55,22 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  ai:
+    build:
+      context: ./services/ai
+      dockerfile: Dockerfile
+    environment:
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:

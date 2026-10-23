@@ -8,6 +8,16 @@ export class UpdateSettingsDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1000) @Max(5000) targetWeightG?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(21) @Max(70) targetAgeDays?: number;
   @IsOptional() @IsString() @MaxLength(60) defaultBreed?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(30) feedAlertDays?: number;
+}
+
+export class UpdateFarmDto {
+  @IsOptional() @IsString() @MinLength(2, { message: "نام مزرعه را وارد کنید." }) @MaxLength(80) name?: string;
+  @IsOptional() @IsString() @MaxLength(120) location?: string;
+}
+
+export class UpdateMemberRoleDto {
+  @IsIn(["manager", "worker", "vet"], { message: "نقش معتبر نیست." }) role!: "manager" | "worker" | "vet";
 }
 
 export class AddMemberDto {

@@ -1,7 +1,7 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
-import { LoginDto, RefreshDto, RegisterDto, SwitchFarmDto } from "./dto";
+import { ChangePasswordDto, LoginDto, RefreshDto, RegisterDto, SwitchFarmDto, UpdateProfileDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { CurrentUser } from "./current-user.decorator";
 import type { AuthUser } from "./auth.types";
@@ -39,6 +39,21 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user.id);
+  }
+
+  @Patch("me")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
+    return this.auth.updateProfile(user.id, dto);
+  }
+
+  @Post("change-password")
+  @ApiBearerAuth()
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(user.id, dto.currentPassword, dto.newPassword);
   }
 
   @Post("switch-farm")

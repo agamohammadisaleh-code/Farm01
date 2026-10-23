@@ -73,6 +73,10 @@ export function toWeightSample(r: any): WeightSample {
     date: isoDate(r.date),
     sample_count: n(r.sampleCount),
     avg_weight_gr: n(r.avgWeightGr),
+    min_weight_gr: r.minWeightGr == null ? null : n(r.minWeightGr),
+    max_weight_gr: r.maxWeightGr == null ? null : n(r.maxWeightGr),
+    cv_pct: r.cvPct == null ? null : n(r.cvPct),
+    uniformity_pct: r.uniformityPct == null ? null : n(r.uniformityPct),
     notes: r.notes,
     created_by: r.createdBy,
     created_at: isoDateTime(r.createdAt),
@@ -166,6 +170,7 @@ export function toSettings(r: any): FarmSettings {
     target_weight_g: n(r.targetWeightG),
     target_age_days: n(r.targetAgeDays),
     default_breed: r.defaultBreed,
+    feed_alert_days: r.feedAlertDays == null ? 3 : n(r.feedAlertDays),
     timezone: r.timezone,
     updated_at: isoDateTime(r.updatedAt),
   };

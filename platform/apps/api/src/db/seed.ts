@@ -162,6 +162,7 @@ export async function seed(db: Database) {
     targetWeightG: 2500,
     targetAgeDays: 42,
     defaultBreed: "راس ۳۰۸",
+    feedAlertDays: 3,
     timezone: "Asia/Tehran",
   });
 

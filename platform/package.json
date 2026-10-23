@@ -3,8 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "description": "پلتفرم مرغ‌یار — API، اپ موبایل، سرویس هوش مصنوعی و بسته دامنه مشترک",
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build:domain": "npm run build -w @farm/domain",
     "test": "npm run test -w @farm/domain && npm run test -w @farm/api",
@@ -13,6 +18,7 @@
     "dev:api": "npm run start:dev -w @farm/api",
     "db:generate": "npm run db:generate -w @farm/api",
     "db:migrate": "npm run db:migrate -w @farm/api",
-    "typecheck": "npm run typecheck -w @farm/domain && npm run typecheck -w @farm/api"
+    "typecheck": "npm run typecheck -w @farm/domain && npm run typecheck -w @farm/api",
+    "test:ai": "cd services/ai && python -m pytest -q"
   }
 }

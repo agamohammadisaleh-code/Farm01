@@ -29,7 +29,9 @@ function expect(actual: any) {
     },
     toHaveLength: (len: number) => assert.strictEqual(actual.length, len, `expected length ${len}`),
     toBeGreaterThan: (v: number) => assert.ok(actual > v, `expected ${actual} > ${v}`),
+    toBeGreaterThanOrEqual: (v: number) => assert.ok(actual >= v, `expected ${actual} >= ${v}`),
     toBeLessThan: (v: number) => assert.ok(actual < v, `expected ${actual} < ${v}`),
+    toContain: (v: unknown) => assert.ok(String(actual).includes(String(v)), `expected ${actual} to contain ${v}`),
     toBeCloseTo: (v: number, digits = 2) =>
       assert.ok(Math.abs(actual - v) < Math.pow(10, -digits), `expected ${actual} ≈ ${v}`),
   };
@@ -48,14 +50,28 @@ describe("Farm API (e2e)", () => {
   let flockId = "";
 
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const today = new Date().toISOString().slice(0, 10);
-  const startDate = new Date(Date.now() - 20 * 86400_000).toISOString().slice(0, 10);
-  const twoDaysAgo = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
+  /**
+   * همه تاریخ‌ها بر مبنای «امروزِ تهران» ساخته می‌شوند، نه UTC.
+   * اگر UTC مبنا باشد، بین ۲۰:۳۰ تا ۲۴:۰۰ UTC مرز روز جابه‌جا می‌شود و
+   * آزمون‌های «تاریخ آینده» بی‌دلیل سبز/قرمز می‌شوند.
+   */
+  const tehranToday = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+  const shift = (days: number) => {
+    const d = new Date(`${tehranToday}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const today = tehranToday;
+  const startDate = shift(-20);
+  const twoDaysAgo = shift(-2);
+  const yesterday = shift(-1);
 
   before(async () => {
     process.env.PGLITE_DATA_DIR = "memory://";
     process.env.JWT_SECRET = "test-secret";
+    // سرویس تحلیل در آزمون در دسترس نیست تا مسیر جایگزین محلی هم آزموده شود
+    process.env.AI_URL = "http://127.0.0.1:9";
+    process.env.AI_TIMEOUT_MS = "300";
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -220,7 +236,7 @@ describe("Farm API (e2e)", () => {
     });
 
     it("تاریخ جوجه‌ریزی در آینده رد می‌شود", async () => {
-      const future = new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10);
+      const future = shift(5);
       const res = await request(server)
         .post("/api/v1/flocks")
         .set(auth(ownerToken))
@@ -307,7 +323,7 @@ describe("Farm API (e2e)", () => {
     });
 
     it("ثبت تاریخ آینده رد می‌شود", async () => {
-      const future = new Date(Date.now() + 86400_000).toISOString().slice(0, 10);
+      const future = shift(2);
       const res = await request(server)
         .post(`/api/v1/flocks/${flockId}/logs`)
         .set(auth(workerToken))
@@ -399,7 +415,7 @@ describe("Farm API (e2e)", () => {
     });
 
     it("وزن‌گیری با تاریخ آینده رد می‌شود", async () => {
-      const future = new Date(Date.now() + 86400_000).toISOString().slice(0, 10);
+      const future = shift(2);
       const res = await request(server)
         .post(`/api/v1/flocks/${flockId}/weights`)
         .set(auth(workerToken))
@@ -416,7 +432,7 @@ describe("Farm API (e2e)", () => {
 
   describe("سلامت: واکسن و دارو", () => {
     it("واکسن آینده به‌صورت برنامه‌ریزی‌شده ثبت می‌شود", async () => {
-      const soon = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10);
+      const soon = shift(2);
       const res = await request(server)
         .post(`/api/v1/flocks/${flockId}/vaccinations`)
         .set(auth(vetToken))
@@ -428,7 +444,7 @@ describe("Farm API (e2e)", () => {
     });
 
     it("واکسن عقب‌افتاده با وضعیت مؤثر overdue شناسایی می‌شود", async () => {
-      const past = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+      const past = shift(-3);
       const res = await request(server)
         .post(`/api/v1/flocks/${flockId}/vaccinations`)
         .set(auth(vetToken))
@@ -477,7 +493,7 @@ describe("Farm API (e2e)", () => {
     });
 
     it("تاریخ شروع دارو در آینده رد می‌شود", async () => {
-      const future = new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10);
+      const future = shift(5);
       const res = await request(server)
         .post(`/api/v1/flocks/${flockId}/medications`)
         .set(auth(vetToken))
@@ -665,6 +681,235 @@ describe("Farm API (e2e)", () => {
     it("سلامت سرویس", async () => {
       const res = await request(server).get("/api/v1/health").expect(200);
       expect(res.body.status).toBe("ok");
+    });
+  });
+
+  describe("یکنواختی وزن", () => {
+    it("نمونه وزن با کمینه/بیشینه، یکنواختی محاسبه‌شده برمی‌گرداند", async () => {
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/weights`)
+        .set(auth(workerToken))
+        .send({ date: twoDaysAgo, sampleCount: 100, avgWeightGr: 1500, minWeightGr: 1250, maxWeightGr: 1750 })
+        .expect(201);
+
+      expect(res.body.cv_pct).toBeGreaterThan(0);
+      expect(res.body.uniformity_pct).toBeGreaterThan(60);
+      expect(res.body.uniformity_pct).toBeLessThan(95);
+    });
+
+    it("یکنواختی ثبت‌شده ترازو همان‌طور ذخیره می‌شود", async () => {
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/weights`)
+        .set(auth(workerToken))
+        .send({ date: yesterday, sampleCount: 80, avgWeightGr: 1600, uniformityPct: 88 })
+        .expect(201);
+      expect(res.body.uniformity_pct).toBe(88);
+    });
+
+    it("کمینه بزرگ‌تر از بیشینه رد می‌شود", async () => {
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/weights`)
+        .set(auth(workerToken))
+        .send({ date: today, sampleCount: 50, avgWeightGr: 1700, minWeightGr: 1800, maxWeightGr: 1500 })
+        .expect(400);
+      expect(res.body.errors?.maxWeightGr).toBeDefined();
+    });
+
+    it("شاخص گله یکنواختی را نشان می‌دهد", async () => {
+      const res = await request(server).get(`/api/v1/analytics/flocks/${flockId}`).set(auth(ownerToken)).expect(200);
+      expect(res.body.uniformityPct).toBe(88);
+      expect(res.body.uniformitySeries.length).toBeGreaterThan(0);
+      expect(res.body.uniformityVerdict).toBe("good");
+    });
+  });
+
+  describe("یادآورها", () => {
+    it("واکسن نزدیک و کمبود انبار در یادآورها دیده می‌شوند", async () => {
+      const res = await request(server).get("/api/v1/reminders").set(auth(workerToken)).expect(200);
+      const kinds = res.body.reminders.map((r: any) => r.kind);
+      expect(res.body.asOf).toBeDefined();
+      expect(kinds.includes("stock")).toBe(true);
+      expect(res.body.counts.total).toBe(res.body.reminders.length);
+    });
+
+    it("افق یادآورها قابل تنظیم است", async () => {
+      const res = await request(server).get("/api/v1/reminders?horizonDays=30").set(auth(ownerToken)).expect(200);
+      expect(res.body.reminders.length).toBeGreaterThan(0);
+    });
+
+    it("نشان یادآور سبک و شمارشی است", async () => {
+      const res = await request(server).get("/api/v1/reminders/badge").set(auth(vetToken)).expect(200);
+      expect(res.body.critical).toBeGreaterThanOrEqual(0);
+      expect(res.body.warning).toBeGreaterThanOrEqual(0);
+    });
+
+    it("آستانه هشدار انبار در تنظیمات مزرعه ذخیره می‌شود", async () => {
+      const res = await request(server).patch("/api/v1/farm/settings").set(auth(ownerToken)).send({ feedAlertDays: 5 }).expect(200);
+      expect(res.body.feed_alert_days).toBe(5);
+    });
+  });
+
+  describe("گزارش‌ها", () => {
+    it("گزارش JSON همان شاخص‌های داشبورد را دارد", async () => {
+      const res = await request(server).get(`/api/v1/reports/flocks/${flockId}`).set(auth(ownerToken)).expect(200);
+      expect(res.body.meta.flockName).toBeDefined();
+      expect(res.body.summary.liveBirds).toBeGreaterThan(0);
+      expect(res.body.tables.logs.length).toBeGreaterThan(0);
+    });
+
+    it("خروجی Excel با نوع درست دانلود می‌شود", async () => {
+      const res = await request(server)
+        .get(`/api/v1/reports/flocks/${flockId}/export?format=xlsx`)
+        .set(auth(ownerToken))
+        .buffer(true)
+        .parse((r: any, cb: any) => {
+          const chunks: Buffer[] = [];
+          r.on("data", (c: Buffer) => chunks.push(c));
+          r.on("end", () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      expect(res.headers["content-type"]).toContain("spreadsheetml");
+      expect(res.headers["content-disposition"]).toContain(".xlsx");
+      expect(Buffer.isBuffer(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThan(2000);
+    });
+
+    it("خروجی PDF فارسی و قابل باز شدن است", async () => {
+      const res = await request(server)
+        .get(`/api/v1/reports/flocks/${flockId}/export?format=pdf`)
+        .set(auth(ownerToken))
+        .buffer(true)
+        .parse((r: any, cb: any) => {
+          const chunks: Buffer[] = [];
+          r.on("data", (c: Buffer) => chunks.push(c));
+          r.on("end", () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      expect(res.headers["content-type"]).toContain("pdf");
+      expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+      expect(res.body.length).toBeGreaterThan(5000);
+    });
+
+    it("کارگر نمی‌تواند خروجی فایل بگیرد", async () => {
+      await request(server).get(`/api/v1/reports/flocks/${flockId}/export?format=xlsx`).set(auth(workerToken)).expect(403);
+    });
+
+    it("گزارش مزرعه فهرست گله‌ها را می‌دهد", async () => {
+      const res = await request(server).get("/api/v1/reports/farm").set(auth(ownerToken)).expect(200);
+      expect(res.body.overview.liveBirds).toBeGreaterThan(0);
+    });
+  });
+
+  describe("سرویس تحلیل", () => {
+    it("وضعیت سرویس گزارش می‌شود", async () => {
+      const res = await request(server).get("/api/v1/ai/status").set(auth(ownerToken)).expect(200);
+      expect(res.body.enabled).toBe(true);
+      expect(typeof res.body.available).toBe("boolean");
+    });
+
+    it("در نبود سرویس، پیش‌بینی محلی با پرچم fallback برمی‌گردد", async () => {
+      const res = await request(server).get(`/api/v1/ai/flocks/${flockId}/forecast`).set(auth(ownerToken)).expect(200);
+      expect(res.body.source).toBe("local");
+      expect(res.body.fallback).toBe(true);
+      expect(res.body.projectedWeightGr).toBeGreaterThan(0);
+      expect(res.body.curve.length).toBeGreaterThan(0);
+    });
+
+    it("تاریخ بارگیری و ریسک بیماری هم بدون سرویس کار می‌کنند", async () => {
+      const loading = await request(server).get(`/api/v1/ai/flocks/${flockId}/loading-date`).set(auth(ownerToken)).expect(200);
+      expect(loading.body.daysFromNow).toBeGreaterThanOrEqual(0);
+      expect(loading.body.expectedDate).toBeDefined();
+
+      const risk = await request(server).get(`/api/v1/ai/flocks/${flockId}/risk`).set(auth(ownerToken)).expect(200);
+      expect(["low", "medium", "high"].includes(risk.body.level)).toBe(true);
+    });
+
+    it("پیش‌بینی مصرف دان انبار را در نظر می‌گیرد", async () => {
+      const res = await request(server).get("/api/v1/ai/farm/feed").set(auth(ownerToken)).expect(200);
+      expect(res.body.stockKg).toBeDefined();
+      expect(res.body.next7DaysKg).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe("مدیریت کاربران", () => {
+    it("کاربر نام خود را ویرایش می‌کند", async () => {
+      const res = await request(server).patch("/api/v1/auth/me").set(auth(ownerToken)).send({ name: "مالک جدید" }).expect(200);
+      expect(res.body.name).toBe("مالک جدید");
+    });
+
+    it("تغییر نقش عضو توسط مالک انجام می‌شود", async () => {
+      const members = await request(server).get("/api/v1/farm/members").set(auth(ownerToken)).expect(200);
+      const worker = members.body.find((m: any) => m.role === "worker");
+      const res = await request(server)
+        .patch(`/api/v1/farm/members/${worker.userId}`)
+        .set(auth(ownerToken))
+        .send({ role: "vet" })
+        .expect(200);
+      expect(res.body.find((m: any) => m.userId === worker.userId).role).toBe("vet");
+
+      // برگرداندن نقش برای آزمون‌های بعدی
+      await request(server).patch(`/api/v1/farm/members/${worker.userId}`).set(auth(ownerToken)).send({ role: "worker" }).expect(200);
+    });
+
+    it("نقش مالک قابل تغییر نیست", async () => {
+      const me = await request(server).get("/api/v1/auth/me").set(auth(ownerToken)).expect(200);
+      const res = await request(server).patch(`/api/v1/farm/members/${me.body.id}`).set(auth(ownerToken)).send({ role: "worker" }).expect(400);
+      expect(res.body.message).toBeDefined();
+    });
+
+    it("گذرواژه نادرست فعلی رد می‌شود", async () => {
+      await request(server)
+        .post("/api/v1/auth/change-password")
+        .set(auth(ownerToken))
+        .send({ currentPassword: "WrongPass1", newPassword: "NewSecret1234" })
+        .expect(401);
+    });
+
+    it("تغییر گذرواژه، ورود با گذرواژه تازه را ممکن می‌کند", async () => {
+      await request(server)
+        .post("/api/v1/auth/change-password")
+        .set(auth(ownerToken))
+        .send({ currentPassword: "Secret1234", newPassword: "NewSecret1234" })
+        .expect(200);
+
+      await request(server).post("/api/v1/auth/login").send({ email: "owner@farm.ir", password: "NewSecret1234" }).expect(200);
+
+      // برگرداندن به گذرواژه اول تا ترتیب آزمون‌ها حساس نباشد
+      const login = await request(server)
+        .post("/api/v1/auth/login")
+        .send({ email: "owner@farm.ir", password: "NewSecret1234" })
+        .expect(200);
+      await request(server)
+        .post("/api/v1/auth/change-password")
+        .set(auth(login.body.accessToken))
+        .send({ currentPassword: "NewSecret1234", newPassword: "Secret1234" })
+        .expect(200);
+    });
+  });
+
+  describe("بستن دوره", () => {
+    it("گله با خلاصه دوره بسته می‌شود", async () => {
+      const temp = await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(ownerToken))
+        .send({ hallId, name: "گله بسته‌شدنی", startDate: startDate, initialCount: 500 })
+        .expect(201);
+
+      const res = await request(server).post(`/api/v1/flocks/${temp.body.id}/close`).set(auth(ownerToken)).send({}).expect(201);
+      expect(res.body.flock.status).toBe("closed");
+      expect(res.body.summary.ageDays).toBeGreaterThan(0);
+      expect(res.body.warnings.length).toBeGreaterThan(0);
+
+      await request(server).post(`/api/v1/flocks/${temp.body.id}/close`).set(auth(ownerToken)).send({}).expect(400);
+
+      const reopened = await request(server).post(`/api/v1/flocks/${temp.body.id}/reopen`).set(auth(ownerToken)).expect(201);
+      expect(reopened.body.status).toBe("active");
+    });
+
+    it("کارگر نمی‌تواند گله را ببندد", async () => {
+      const list = await request(server).get("/api/v1/flocks").set(auth(ownerToken)).expect(200);
+      const active = list.body.find((f: any) => f.status === "active" && f.name.includes("بسته"));
+      await request(server).post(`/api/v1/flocks/${active.id}/close`).set(auth(workerToken)).send({}).expect(403);
     });
   });
 });

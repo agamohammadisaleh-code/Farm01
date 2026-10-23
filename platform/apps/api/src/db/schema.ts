@@ -104,6 +104,8 @@ export const farmSettings = pgTable("farm_settings", {
   targetWeightG: integer("target_weight_g").notNull(),
   targetAgeDays: integer("target_age_days").notNull(),
   defaultBreed: text("default_breed").notNull(),
+  /** آستانه هشدار انبار: کمتر از این تعداد روزِ مصرف باقی‌مانده = هشدار */
+  feedAlertDays: integer("feed_alert_days").notNull().default(3),
   timezone: text("timezone").notNull().default("Asia/Tehran"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -209,6 +211,12 @@ export const weightSamples = pgTable(
     sampleCount: integer("sample_count").notNull().default(100),
     /** میانگین وزن نمونه (گرم) */
     avgWeightGr: integer("avg_weight_gr").notNull(),
+    /** سبک‌ترین و سنگین‌ترین قطعه نمونه — پایه برآورد ضریب تغییرات */
+    minWeightGr: integer("min_weight_gr"),
+    maxWeightGr: integer("max_weight_gr"),
+    /** ضریب تغییرات (٪) و یکنواختی (٪)؛ اگر کاربر نداده باشد محاسبه می‌شود */
+    cvPct: numeric("cv_pct", { precision: 5, scale: 2 }),
+    uniformityPct: numeric("uniformity_pct", { precision: 5, scale: 2 }),
     notes: text("notes"),
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -6,7 +6,7 @@ import { Roles } from "../common/roles";
 import { CurrentUser } from "../auth/current-user.decorator";
 import type { AuthUser } from "../auth/auth.types";
 import { FlocksService } from "./flocks.service";
-import { CreateFlockDto, UpdateFlockDto } from "./flocks.dto";
+import { CloseFlockDto, CreateFlockDto, UpdateFlockDto } from "./flocks.dto";
 
 @ApiTags("flocks")
 @ApiBearerAuth()
@@ -43,6 +43,18 @@ export class FlocksController {
   @Roles("owner", "manager")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateFlockDto) {
     return this.service.update(user.farmId, id, dto);
+  }
+
+  @Post(":id/close")
+  @Roles("owner", "manager")
+  close(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: CloseFlockDto) {
+    return this.service.close(user.farmId, id, dto);
+  }
+
+  @Post(":id/reopen")
+  @Roles("owner", "manager")
+  reopen(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.service.reopen(user.farmId, id);
   }
 
   @Delete(":id")

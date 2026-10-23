@@ -10,6 +10,9 @@ import { InventoryModule } from "./inventory/inventory.module";
 import { ExpensesModule } from "./expenses/expenses.module";
 import { SalesModule } from "./sales/sales.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
+import { RemindersModule } from "./reminders/reminders.module";
+import { ReportsModule } from "./reports/reports.module";
+import { AiModule } from "./ai/ai.module";
 import { FarmsModule } from "./farms/farms.module";
 import { DatabaseModule } from "./db/db.module";
 import { HealthController } from "./health.controller";
@@ -29,6 +32,9 @@ import { HealthController } from "./health.controller";
     SalesModule,
     InventoryModule,
     AnalyticsModule,
+    RemindersModule,
+    ReportsModule,
+    AiModule,
   ],
   controllers: [HealthController],
 })

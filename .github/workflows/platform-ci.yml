@@ -35,3 +35,23 @@ jobs:
 
       - name: تست دامنه و API
         run: npm test
+
+  ai-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/services/ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: platform/services/ai/requirements.txt
+
+      - name: نصب وابستگی‌ها
+        run: pip install -r requirements.txt
+
+      - name: تست سرویس تحلیل
+        run: python -m pytest -q

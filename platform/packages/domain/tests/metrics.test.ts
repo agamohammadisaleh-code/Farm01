@@ -8,6 +8,7 @@ import {
   categoryLabel,
 } from "../src/metrics";
 import { addDaysIso } from "../src/jalali";
+import { cvFromUniformity, estimateCvFromRange, sampleUniformity, uniformityFromCv, uniformityVerdict } from "../src/uniformity";
 import type { DailyLog, Expense, Flock, Sale, WeightSample } from "../src/types";
 
 const today = "2026-10-23";
@@ -278,4 +279,74 @@ test("تجمیع مزرعه از چند گله", () => {
   assert.equal(o.liveBirds, a.liveBirds + b.liveBirds);
   assert.ok(o.totalCostAll > 0);
   assert.ok(o.mortalityPctWeighted > 0);
+});
+
+test("یکنواختی: CV = ۱۰٪ معادل حدود ۶۸٪ و کمتر بودن CV یعنی یکنواخت‌تر", () => {
+  const u = uniformityFromCv(10);
+  assert.ok(u > 67.5 && u < 68.5, `uniformity=${u}`);
+  assert.ok(uniformityFromCv(6) > uniformityFromCv(12));
+});
+
+test("یکنواختی: تبدیل به CV و برگشت پایدار است", () => {
+  const cv = cvFromUniformity(80);
+  assert.ok(Math.abs(uniformityFromCv(cv) - 80) < 0.05, `cv=${cv}`);
+});
+
+test("یکنواختی: برآورد CV از دامنه وزن نمونه", () => {
+  // دامنه ۴۰۰ گرم روی میانگین ۱۰۰۰ گرم → σ ≈ ۱۰۰ → CV ≈ ۱۰٪
+  assert.equal(estimateCvFromRange(800, 1200, 1000), 10);
+  assert.equal(estimateCvFromRange(null, 1200, 1000), null);
+});
+
+function sample(over: Partial<WeightSample> = {}): WeightSample {
+  return {
+    id: "w1",
+    flock_id: "f1",
+    date: today,
+    sample_count: 100,
+    avg_weight_gr: 1000,
+    notes: null,
+    created_by: null,
+    created_at: "",
+    updated_at: "",
+    deleted_at: null,
+    ...over,
+  };
+}
+
+test("یکنواختی: مقدار ثبت‌شده ترازو بر برآورد اولویت دارد", () => {
+  const r = sampleUniformity(sample({ uniformity_pct: 85, min_weight_gr: 700, max_weight_gr: 1300 }));
+  assert.equal(r.uniformityPct, 85);
+  assert.equal(r.source, "measured");
+});
+
+test("یکنواختی: در نبود عدد ترازو، از دامنه برآورد می‌شود", () => {
+  const r = sampleUniformity(sample({ min_weight_gr: 800, max_weight_gr: 1200 }));
+  assert.equal(r.source, "range");
+  assert.ok(r.uniformityPct! > 60 && r.uniformityPct! < 75, `u=${r.uniformityPct}`);
+});
+
+test("یکنواختی: قضاوت در سه سطح", () => {
+  assert.equal(uniformityVerdict(85), "good");
+  assert.equal(uniformityVerdict(75), "fair");
+  assert.equal(uniformityVerdict(60), "poor");
+  assert.equal(uniformityVerdict(null), "unknown");
+});
+
+test("متریک گله یکنواختی آخرین نمونه را برمی‌گرداند", () => {
+  const m = computeMetrics(
+    flock(),
+    logs(30),
+    [],
+    [],
+    { today, marketPrice: 98000, feedPrice: 33500 },
+    [
+      sample({ date: addDaysIso(start, 6), avg_weight_gr: 180, min_weight_gr: 150, max_weight_gr: 210 }),
+      sample({ date: addDaysIso(start, 20), avg_weight_gr: 900, min_weight_gr: 800, max_weight_gr: 1000 }),
+    ],
+  );
+  assert.equal(m.weighCount, 2);
+  assert.ok(m.uniformityPct != null);
+  assert.equal(m.uniformitySeries.length, 2);
+  assert.equal(m.avgUniformityPct != null, true);
 });

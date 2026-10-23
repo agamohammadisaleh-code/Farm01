@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { Flock } from "@farm/domain";
@@ -8,11 +8,15 @@ import { assertValid } from "../common/errors";
 import { todayIso } from "../common/ids";
 import { money, n } from "../common/parse";
 import { toFlock } from "../common/mappers";
-import type { CreateFlockDto, UpdateFlockDto } from "./flocks.dto";
+import type { CloseFlockDto, CreateFlockDto, UpdateFlockDto } from "./flocks.dto";
+import { AnalyticsService } from "../analytics/analytics.service";
 
 @Injectable()
 export class FlocksService {
-  constructor(@Inject(DATABASE) private readonly database: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly database: Database,
+    private readonly analytics: AnalyticsService,
+  ) {}
 
   private get db(): any {
     return this.database.db;
@@ -136,6 +140,66 @@ export class FlocksService {
   }
 
   /** حذف نرم گله و همه رکوردهای وابسته (برای همگام‌سازی آفلاین) */
+  /**
+   * بستن دوره.
+   *
+   * بستن، داده را قفل نمی‌کند؛ فقط پایان دوره را اعلام می‌کند تا شاخص‌ها در
+   * گزارش‌ها به‌عنوان «تحقق‌یافته» حساب شوند. اگر گله پرنده زنده داشته باشد،
+   * هشدار داده می‌شود ولی جلوگیری نمی‌شود (ممکن است تلفات پایان دوره باشد).
+   */
+  async close(farmId: string, id: string, dto: CloseFlockDto, timezone = "Asia/Tehran") {
+    const flock = await this.get(farmId, id);
+    if (flock.status === "closed") throw new BadRequestException("این گله پیش‌تر بسته شده است.");
+
+    const closedDate = dto.closedDate ?? todayIso(timezone);
+    const errors: Record<string, string> = {};
+    if (closedDate > todayIso(timezone)) errors.closedDate = "تاریخ پایان نمی‌تواند در آینده باشد.";
+    if (closedDate < flock.start_date) errors.closedDate = "تاریخ پایان نمی‌تواند پیش از جوجه‌ریزی باشد.";
+    assertValid(errors, "گله بسته نشد.");
+
+    await this.db
+      .update(flocks)
+      .set({ status: "closed", closedDate, updatedAt: new Date() })
+      .where(and(eq(flocks.id, id), eq(flocks.farmId, farmId)));
+
+    const metrics = await this.analytics.flockMetrics(farmId, id);
+    const warnings: string[] = [];
+    if (metrics.liveBirds > 0) {
+      warnings.push(`${metrics.liveBirds.toLocaleString("fa-IR")} قطعه زنده در گله مانده و فروشی برایشان ثبت نشده است.`);
+    }
+    if (closedDate < flock.start_date || metrics.ageDays < 7) {
+      warnings.push("دوره کوتاه‌تر از یک هفته است؛ شاخص‌های مقایسه‌ای معتبر نیستند.");
+    }
+    return {
+      flock: await this.get(farmId, id),
+      summary: {
+        ageDays: metrics.ageDays,
+        liveBirds: metrics.liveBirds,
+        soldBirds: metrics.soldBirds,
+        totalFeedKg: metrics.totalFeedKg,
+        fcr: metrics.fcr,
+        mortalityPct: metrics.mortalityPct,
+        totalCost: metrics.totalCost,
+        revenue: metrics.revenue,
+        netProfit: metrics.netProfit,
+        costPerKgLive: metrics.costPerKgLive,
+        uniformityPct: metrics.uniformityPct,
+      },
+      warnings,
+    };
+  }
+
+  /** بازگشایی گله بسته‌شده برای اصلاح ثبت‌ها */
+  async reopen(farmId: string, id: string) {
+    const flock = await this.get(farmId, id);
+    if (flock.status === "active") throw new BadRequestException("این گله از قبل باز است.");
+    await this.db
+      .update(flocks)
+      .set({ status: "active", closedDate: null, updatedAt: new Date() })
+      .where(and(eq(flocks.id, id), eq(flocks.farmId, farmId)));
+    return this.get(farmId, id);
+  }
+
   async remove(farmId: string, id: string) {
     await this.get(farmId, id);
     const now = new Date();

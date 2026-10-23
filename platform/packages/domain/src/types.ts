@@ -70,6 +70,8 @@ export interface FarmSettings {
   target_weight_g: number;
   target_age_days: number;
   default_breed: string;
+  /** آستانه هشدار انبار دان (روز) */
+  feed_alert_days?: number;
   timezone: string;
   updated_at: string;
 }
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Omit<FarmSettings, "farm_id" | "updated_at"> = {
   target_weight_g: 2500,
   target_age_days: 42,
   default_breed: "راس ۳۰۸",
+  feed_alert_days: 3,
   timezone: "Asia/Tehran",
 };
 
@@ -150,6 +153,13 @@ export interface WeightSample {
   sample_count: number;
   /** میانگین وزن نمونه (گرم) */
   avg_weight_gr: number;
+  /** سبک‌ترین و سنگین‌ترین قطعه نمونه (اختیاری، برای برآورد پراکندگی) */
+  min_weight_gr?: number | null;
+  max_weight_gr?: number | null;
+  /** ضریب تغییرات (٪) */
+  cv_pct?: number | null;
+  /** یکنواختی (٪): سهم قطعه‌های داخل ±۱۰٪ میانگین */
+  uniformity_pct?: number | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;

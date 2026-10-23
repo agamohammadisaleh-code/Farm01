@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import type { WeightSample } from "@farm/domain";
+import { sampleUniformity, type WeightSample } from "@farm/domain";
 import { DATABASE, type Database } from "../db/database";
 import { weightSamples } from "../db/schema";
 import { assertValid } from "../common/errors";
@@ -39,17 +39,62 @@ export class WeightSamplesService {
     assertValid(errors, "وزن‌گیری ثبت نشد.");
 
     const id = randomUUID();
+    const spread = this.spread(dto);
     await this.db.insert(weightSamples).values({
       id,
       flockId,
       date: dto.date,
       sampleCount: dto.sampleCount,
       avgWeightGr: dto.avgWeightGr,
+      minWeightGr: dto.minWeightGr ?? null,
+      maxWeightGr: dto.maxWeightGr ?? null,
+      cvPct: spread.cvPct,
+      uniformityPct: spread.uniformityPct,
       notes: dto.notes?.slice(0, 300) ?? null,
       createdBy: userId,
     });
     const rows = await this.db.select().from(weightSamples).where(eq(weightSamples.id, id)).limit(1);
     return toWeightSample(rows[0]);
+  }
+
+  /**
+   * یکنواختی و CV نمونه را نرمال می‌کند:
+   * ترازو عدد می‌دهد → همان ذخیره می‌شود؛ وگرنه از دامنه وزن برآورد می‌گردد.
+   * اعتبارسنجی منطقی: کمینه ≤ میانگین ≤ بیشینه.
+   */
+  private spread(dto: CreateWeightSampleDto) {
+    const errors: Record<string, string> = {};
+    if (dto.minWeightGr != null && dto.maxWeightGr != null && dto.minWeightGr > dto.maxWeightGr) {
+      errors.maxWeightGr = "بیشترین وزن نباید از کمترین وزن کمتر باشد.";
+    }
+    if (dto.minWeightGr != null && dto.minWeightGr > dto.avgWeightGr) {
+      errors.minWeightGr = "کمترین وزن نباید از میانگین بیشتر باشد.";
+    }
+    if (dto.maxWeightGr != null && dto.maxWeightGr < dto.avgWeightGr) {
+      errors.maxWeightGr = "بیشترین وزن نباید از میانگین کمتر باشد.";
+    }
+    assertValid(errors, "وزن‌گیری ثبت نشد.");
+
+    const result = sampleUniformity({
+      id: "",
+      flock_id: "",
+      date: dto.date,
+      sample_count: dto.sampleCount,
+      avg_weight_gr: dto.avgWeightGr,
+      min_weight_gr: dto.minWeightGr ?? null,
+      max_weight_gr: dto.maxWeightGr ?? null,
+      cv_pct: dto.cvPct ?? null,
+      uniformity_pct: dto.uniformityPct ?? null,
+      notes: null,
+      created_by: null,
+      created_at: "",
+      updated_at: "",
+      deleted_at: null,
+    });
+    return {
+      cvPct: result.cvPct == null ? null : String(result.cvPct),
+      uniformityPct: result.uniformityPct == null ? null : String(result.uniformityPct),
+    };
   }
 
   async remove(farmId: string, flockId: string, id: string) {

@@ -55,3 +55,30 @@ export class SwitchFarmDto {
   @MinLength(8)
   farmId!: string;
 }
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MinLength(2, { message: "نام را وارد کنید." })
+  @MaxLength(80)
+  name?: string;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(20)
+  phone?: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(1, { message: "گذرواژه فعلی را وارد کنید." })
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(8, { message: "گذرواژه جدید باید حداقل ۸ نویسه باشد." })
+  @MaxLength(72)
+  @Matches(/[A-Za-z\u0600-\u06FF]/, { message: "گذرواژه باید حداقل یک حرف داشته باشد." })
+  newPassword!: string;
+}

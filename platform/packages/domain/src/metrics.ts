@@ -1,5 +1,6 @@
 import { faDigits, formatJalali, isoDaysBetween, todayIso } from "./jalali";
 import { standardAt } from "./standards";
+import { sampleUniformity, uniformityVerdict, type UniformityResult } from "./uniformity";
 import type {
   CostCategory,
   DailyLog,
@@ -94,6 +95,14 @@ export interface CycleMetrics {
   /** تعداد قطعه وزن‌شده در آخرین نمونه (اعتبار آماری) */
   lastSampleCount: number | null;
   weighCount: number;
+  /** یکنواختی آخرین نمونه (٪) */
+  uniformityPct: number | null;
+  /** میانگین وزنی یکنواختی همه نمونه‌ها (٪) */
+  avgUniformityPct: number | null;
+  cvPct: number | null;
+  uniformityVerdict: "good" | "fair" | "poor" | "unknown";
+  /** روند یکنواختی در طول دوره */
+  uniformitySeries: { date: string; day: number; uniformityPct: number; cvPct: number | null }[];
   dailyGainG: number;
   stdWeightG: number;
   stdCumFeedG: number;
@@ -215,6 +224,25 @@ export function computeMetrics(
   const stdWeightG = stdNow.weightG;
   const measuredWeightG = lastWeigh?.avg_weight_gr ?? null;
   const lastSampleCount = lastWeigh?.sample_count ?? null;
+
+  const uniformitySeries = sortedWeights
+    .map((w) => {
+      const u = sampleUniformity(w);
+      if (u.uniformityPct == null) return null;
+      return {
+        date: w.date.slice(0, 10),
+        day: Math.max(1, isoDaysBetween(flock.start_date, w.date) + 1),
+        uniformityPct: u.uniformityPct,
+        cvPct: u.cvPct,
+      };
+    })
+    .filter((x): x is { date: string; day: number; uniformityPct: number; cvPct: number | null } => x !== null);
+
+  const uniformityPct = uniformitySeries.length ? uniformitySeries[uniformitySeries.length - 1].uniformityPct : null;
+  const avgUniformityPct = uniformitySeries.length
+    ? Math.round(uniformitySeries.reduce((sum, x) => sum + x.uniformityPct, 0) / uniformitySeries.length)
+    : null;
+  const cvPct = uniformitySeries.length ? (uniformitySeries[uniformitySeries.length - 1].cvPct ?? null) : null;
   let currentWeightG = stdWeightG;
   let weightSource: CycleMetrics["weightSource"] = "none";
   if (measuredWeightG) {
@@ -398,6 +426,11 @@ export function computeMetrics(
     measuredWeightG,
     lastSampleCount,
     weighCount: sortedWeights.length,
+    uniformityPct,
+    avgUniformityPct,
+    cvPct,
+    uniformityVerdict: uniformityVerdict(uniformityPct),
+    uniformitySeries,
     dailyGainG,
     stdWeightG,
     stdCumFeedG: stdNow.cumFeedG,

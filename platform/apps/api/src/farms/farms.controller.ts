@@ -6,7 +6,7 @@ import { Roles } from "../common/roles";
 import { CurrentUser } from "../auth/current-user.decorator";
 import type { AuthUser } from "../auth/auth.types";
 import { FarmsService } from "./farms.service";
-import { AddMemberDto, CreateFarmDto, UpdateSettingsDto } from "./farms.dto";
+import { AddMemberDto, CreateFarmDto, UpdateFarmDto, UpdateMemberRoleDto, UpdateSettingsDto } from "./farms.dto";
 
 @ApiTags("farm")
 @ApiBearerAuth()
@@ -24,6 +24,12 @@ export class FarmsController {
   @Roles("owner", "manager")
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateFarmDto) {
     return this.service.create(user.id, dto);
+  }
+
+  @Patch()
+  @Roles("owner", "manager")
+  updateFarm(@CurrentUser() user: AuthUser, @Body() dto: UpdateFarmDto) {
+    return this.service.updateFarm(user.farmId, dto);
   }
 
   @Get("settings")
@@ -48,6 +54,16 @@ export class FarmsController {
   @Roles("owner")
   addMember(@CurrentUser() user: AuthUser, @Body() dto: AddMemberDto) {
     return this.service.addMember(user.farmId, dto);
+  }
+
+  @Patch("members/:userId")
+  @Roles("owner")
+  updateMemberRole(
+    @CurrentUser() user: AuthUser,
+    @Param("userId") userId: string,
+    @Body() dto: UpdateMemberRoleDto,
+  ) {
+    return this.service.updateMemberRole(user.farmId, user.id, userId, dto.role);
   }
 
   @Delete("members/:userId")

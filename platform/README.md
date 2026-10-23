@@ -66,6 +66,8 @@ JWT کوتاه‌عمر (۱۵ دقیقه) + توکن تازه‌سازی چرخ�
 | مدیریت اعضا | ✅ | ❌ | ❌ | ❌ |
 | اصلاح موجودی انبار (تعیین قطعی) | ✅ | ✅ | ❌ | ❌ |
 | گزارش مصرف دان (اصلاح افزایشی) | ✅ | ✅ | ✅ | ✅ |
+| یادآورها و هشدار انبار | ✅ | ✅ | ✅ | ✅ |
+| خروجی Excel/PDF | ✅ | ✅ | ❌ | ❌ |
 
 دلیل: داده مالی در عمل در اختیار مالک است؛ کارگر و دامپزشک شاخص‌های زیستی را می‌بینند ولی به هزینه و فروش دسترسی ندارند (حتی در پاسخ تحلیلی، فیلدهای مالی حذف می‌شوند).
 
@@ -126,27 +128,32 @@ Farm(id, name, location, owner_id)
 
 ```
 POST   /auth/register | /auth/login | /auth/refresh | /auth/logout
-GET    /auth/me
+GET    /auth/me              PATCH /auth/me            POST /auth/change-password
 POST   /auth/switch-farm
-GET    /farm                              اطلاعات مزرعه فعال
+GET    /farm                 POST  /farm               PATCH /farm
 GET    /farm/settings        PATCH /farm/settings
-GET    /farm/members         POST  /farm/members      DELETE /farm/members/:userId
-POST   /farm                              ساخت مزرعه دوم برای همان کاربر
-GET    /farm/inventory       POST  /farm/inventory          افزودن دان
-POST   /farm/inventory/set   POST  /farm/inventory/adjust   تعیین قطعی | اصلاح ±
+GET    /farm/members         POST  /farm/members       PATCH|DELETE /farm/members/:userId
 GET    /halls                POST  /halls
-GET    /halls/:id            PATCH /halls/:id           DELETE /halls/:id
+GET    /halls/:id            PATCH /halls/:id          DELETE /halls/:id
 GET    /flocks               POST  /flocks
-GET    /flocks/:id           PATCH /flocks/:id          DELETE /flocks/:id
+GET    /flocks/:id           PATCH /flocks/:id         DELETE /flocks/:id
+POST   /flocks/:id/close     POST  /flocks/:id/reopen
 GET    /flocks/:id/stats
-GET    /flocks/:id/logs      POST  /flocks/:id/logs     DELETE /flocks/:id/logs/:logId
-GET    /flocks/:id/weights   POST  /flocks/:id/weights  DELETE /flocks/:id/weights/:id
-GET    /flocks/:id/vaccinations   POST /flocks/:id/vaccinations   PATCH|DELETE /flocks/:id/vaccinations/:id
-GET    /flocks/:id/medications    POST /flocks/:id/medications    PATCH|DELETE /flocks/:id/medications/:id
+GET    /flocks/:id/logs      POST  /flocks/:id/logs    DELETE /flocks/:id/logs/:logId
+GET    /flocks/:id/weights   POST  /flocks/:id/weights DELETE /flocks/:id/weights/:id
+GET    /flocks/:id/vaccinations   POST|PATCH|DELETE /flocks/:id/vaccinations[/:id]
+GET    /flocks/:id/medications    POST|PATCH|DELETE /flocks/:id/medications[/:id]
 GET    /flocks/:id/health
 GET    /flocks/:id/expenses  POST  /flocks/:id/expenses  PATCH|DELETE /flocks/:id/expenses/:id
 GET    /flocks/:id/sales     POST  /flocks/:id/sales     DELETE /flocks/:id/sales/:id
+GET    /farm/inventory       POST  /farm/inventory       POST /farm/inventory/set|adjust
 GET    /analytics/overview   GET   /analytics/flocks/:id
+GET    /reminders            GET   /reminders/badge
+GET    /reports/flocks/:id   GET   /reports/flocks/:id/export?format=xlsx|pdf|json
+GET    /reports/farm         GET   /reports/farm/export?format=xlsx|json
+GET    /ai/status
+GET    /ai/flocks/:id/forecast | /loading-date | /risk
+GET    /ai/farm/feed
 GET    /health
 ```
 
@@ -154,10 +161,70 @@ GET    /health
 
 ---
 
+## یکنواختی وزن
+
+یکنواختی = درصد قطعه‌هایی که وزنشان در بازه ±۱۰٪ میانگین است. اگر ترازو خودش
+CV یا یکنواختی بدهد همان ذخیره می‌شود؛ وگرنه از کمینه/بیشینه نمونه برآورد
+می‌گردد (دامنه ≈ ۴σ). رابطه پایه:
+
+```
+CV = ۱۰٪  →  z = ۰٫۱/CV  →  یکنواختی = 2Φ(z) − 1 ≈ ۶۸٪
+```
+
+قضاوت: بالای ۸۰٪ خوب، ۷۰–۸۰ متوسط، پایین‌تر ضعیف. عدد یکنواختی در شاخص‌ها،
+گزارش و نمودار سری زمانی برمی‌گردد.
+
+---
+
+## یادآورها
+
+`GET /reminders` یک فهرست واحد از «امروز چه کاری باید انجام شود» می‌دهد:
+
+| نوع | منبع |
+|---|---|
+| `vaccination` | واکسن‌های سررسیدشده یا نزدیک (افق پیش‌فرض ۷ روز، قابل تنظیم) |
+| `medication` | پایان دوره دارو |
+| `withdrawal` | دوره پرهیز دارویی؛ تا پایان آن فروش مجاز نیست |
+| `stock` | موجودی دان کمتر از آستانه `feed_alert_days` (پیش‌فرض ۳ روز مصرف) |
+| `log` | ثبت روزانه جاافتاده |
+| `milestone` | نزدیک شدن به سن هدف/بارگیری |
+
+هیچ یادآوری ذخیره نمی‌شود؛ همه از داده واقعی محاسبه می‌شوند تا با واقعیت
+انحراف پیدا نکنند.
+
+---
+
+## گزارش‌ها (Excel و PDF)
+
+| خروجی | مسیر | نکته |
+|---|---|---|
+| JSON | `/reports/flocks/:id` | همان داده‌ای که فایل‌ها از آن ساخته می‌شوند |
+| Excel | `?format=xlsx` | ۷ برگه، راست‌به‌چپ، اعداد عددی (قابل جمع و نمودار) |
+| PDF | `?format=pdf` | فونت وزیرمتن جاسازی‌شده + شکل‌دهی حروف + الگوریتم دوجهته |
+
+PDF فارسی دو مشکل رایج دارد که هر دو حل شده‌اند: شکل حروف (چسبیدن اول/میان/آخر)
+با بازآرایی گلیف‌ها، و ترتیب نمایش با الگوریتم دوجهته یونیکد. بدون این دو،
+متن فارسی در PDF جدا و برعکس دیده می‌شود.
+
+---
+
+## سرویس هوش مصنوعی
+
+سرویس مستقل FastAPI در `services/ai` با چهار قابلیت: پیش‌بینی وزن (برازش
+گومپرتز)، تاریخ بهینه بارگیری (وزن هدف در برابر صرفه اقتصادی رشد)، ریسک
+بیماری (تلفات، نسبت آب به دان، افت مصرف، دما) و پیش‌بینی مصرف دان.
+
+**API به این سرویس وابسته نیست.** اگر خاموش یا کند باشد، همان محاسبه در
+NestJS انجام می‌شود و پاسخ `source: "local"` می‌گیرد. این انتخاب عمدی است:
+ثبت داده و گزارش نباید به یک سرویس جانبی گره بخورد.
+
+---
+
 ## آزمون‌ها
 
 ```bash
-npm test          # ۳۰ تست دامنه + ۵۵ تست یکپارچه API
+npm test          # ۳۷ تست دامنه + ۷۹ تست یکپارچه API
+cd services/ai && python -m pytest -q   # ۱۱ تست سرویس تحلیل
 ```
 
 آزمون‌های API روی PGlite اجرا می‌شوند و این موارد را می‌سنجند: ثبت‌نام/ورود/چرخش توکن، ۴۰۱ بدون توکن، ماتریس RBAC، upsert ثبت روزانه، رد تاریخ آینده و تلفات بیش از موجودی، ظرفیت سالن و رد سالن مزرعه دیگر، وزن‌گیری نمونه‌ای و استفاده از آن به‌عنوان منبع وزن، وضعیت مؤثر واکسن (شامل `overdue`)، دوره پرهیز دارو، و حسابداری انبار (خرید، کسر مصرف، ویرایش بدون کسر دوباره، منفی‌شدن در کمبود، رد اصلاح دستی منفی)، و جداسازی داده دو مزرعه.
@@ -205,9 +272,9 @@ SEED_RESET=1 npm run seed --workspace @farm/api # پاک‌سازی و ساخت 
 | API + PostgreSQL + JWT/RBAC + مهاجرت + تست | ✅ |
 | انتقال داده از SQLite | ✅ اسکریپت آماده (`scripts/import-legacy.mjs`) |
 | Redis (کش/صف) | ⏳ در compose تعریف شده، مصرف کد در فاز اعلان‌ها و صف همگام‌سازی |
-| سرویس AI (FastAPI) | ⏳ فاز بعد |
+| سرویس AI (FastAPI) | ✅ پیش‌بینی وزن، بارگیری، ریسک بیماری، مصرف دان (با جایگزین محلی) |
 | وب با Tailwind + Recharts | ⏳ فاز بعد (نسخه فعلی Next.js همچنان در ریشه مخزن کار می‌کند) |
-| موبایل Expo + SQLite/WatermelonDB | ⏳ فاز بعد |
+| موبایل Expo + SQLite/WatermelonDB | ⏳ فاز بعد (PWA فعلی در ریشه مخزن) |
 | ذخیره فایل S3 | ⏳ فاز بعد (گزارش‌ها و پیوست‌ها) |
 
 تا زمانی که وب و موبایل جدید آماده نشوند، نسخه فعلی (Next.js + SQLite + PWA) در ریشه مخزن دست‌نخورده و قابل استفاده می‌ماند.
