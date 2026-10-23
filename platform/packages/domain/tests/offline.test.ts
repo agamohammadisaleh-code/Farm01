@@ -5,6 +5,7 @@ import {
   can,
   clearQueue,
   createQueue,
+  decideLogMerge,
   enqueue,
   failedCount,
   MAX_ATTEMPTS,
@@ -263,4 +264,27 @@ test("افق برنامه‌ریزی و سقف تعداد رعایت می‌شو
 test("یادآور منقضی در گذشته زمان‌بندی نمی‌شود", () => {
   const past = [{ id: "v0", kind: "vaccination", title: "واکسن دیروز", due: "2026-10-20" }];
   assert.equal(planNotifications(past, { now: NOW }).length, 0);
+});
+
+/* ------------------------- حل تعارض ثبت روزانه ------------------------- */
+
+test("ادغام: ثبت در صف با نسخه سرور بازنویسی نمی‌شود", () => {
+  const local = { pending: 1, updated_at: "2026-10-01T08:00:00.000Z" };
+  const remote = { updated_at: "2026-10-01T09:00:00.000Z" };
+
+  assert.equal(decideLogMerge(local, remote), "keep-local");
+});
+
+test("ادغام: نسخه جدیدتر سرور می‌نویسد و نسخه قدیمی‌تر نه", () => {
+  const local = { pending: 0, updated_at: "2026-10-01T10:00:00.000Z" };
+
+  assert.equal(decideLogMerge(local, { updated_at: "2026-10-01T11:00:00.000Z" }), "write");
+  assert.equal(decideLogMerge(local, { updated_at: "2026-10-01T09:00:00.000Z" }), "skip");
+  assert.equal(decideLogMerge(local, { updated_at: "2026-10-01T10:00:00.000Z" }), "skip");
+});
+
+test("ادغام: ردیف تازه می‌نویسد و حذف سرور، حذف محلی است", () => {
+  assert.equal(decideLogMerge(null, { updated_at: "2026-10-01T11:00:00.000Z" }), "write");
+  assert.equal(decideLogMerge({ pending: 0, updated_at: "2026-10-01T11:00:00.000Z" }, { deleted: true }), "delete");
+  assert.equal(decideLogMerge({ pending: 1 }, { deleted: true }), "delete");
 });

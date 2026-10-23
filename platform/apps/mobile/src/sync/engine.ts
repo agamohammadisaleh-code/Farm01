@@ -14,9 +14,9 @@
 import {
   applyResults,
   createQueue,
+  decideLogMerge,
   enqueue,
   markSent,
-  mergeByUpdatedAt,
   nextBatch,
   summarize,
   type QueueState,
@@ -28,11 +28,12 @@ import {
 import { OfflineError, api } from "../api/client";
 import {
   clearPendingFlag,
+  deleteLocalLogByServerId,
+  getValue,
   loadQueue,
-  openDb,
+  logByKey,
   saveQueue,
   setValue,
-  getValue,
   upsertFlocks,
   upsertLocalLog,
 } from "../storage/db";
@@ -83,7 +84,8 @@ export function recordOffline(input: EnqueueInput): { clientId: string } {
       notes?: string;
     };
     upsertLocalLog({
-      id: clientId,
+      // هنوز شناسه‌ای از سرور نداریم؛ کلید محلی (گله، تاریخ) است
+      id: null,
       flock_id: input.flockId,
       date: payload.date,
       mortality: Number(payload.mortality ?? 0),
@@ -143,10 +145,14 @@ export async function pushQueue(): Promise<{ applied: number; failed: number; of
     queue = outcome.state;
     saveQueue(queue);
 
-    // ثبت‌های موفق، دیگر «در صف» نیستند
+    // ثبت‌های موفق، دیگر «در صف» نیستند و شناسه سرور را می‌گیرند
+    const byClientId = new Map(batch.map((op) => [op.clientId, op]));
     for (const result of response.results ?? []) {
-      if (result.status === "applied" || result.status === "duplicate") {
-        clearPendingFlag(result.entityId ?? result.clientId);
+      if (result.status !== "applied" && result.status !== "duplicate") continue;
+      const op = byClientId.get(result.clientId);
+      if (op?.type === "log.save") {
+        const payload = op.payload as { date?: string };
+        if (payload.date) clearPendingFlag(op.flockId, payload.date, result.entityId ?? null);
       }
     }
 
@@ -169,35 +175,33 @@ export async function pullChanges(): Promise<{ changed: number; offline: boolean
       deletedFlocks,
     );
 
-    const db = openDb();
     let changed = 0;
     const logRows = (data.logs ?? []) as any[];
     for (const log of logRows) {
-      if (log.deleted) {
-        db.runSync("DELETE FROM logs WHERE id = ?", [log.id]);
+      // حذف در سرور = حذف محلی (شناسه سرور، نه کلید تاریخ)
+      if (decideLogMerge(null, log) === "delete") {
+        deleteLocalLogByServerId(log.id);
         changed += 1;
         continue;
       }
-      const existing = db.getFirstSync<any>("SELECT updated_at FROM logs WHERE id = ?", [log.id]);
-      const merged = mergeByUpdatedAt(
-        existing ? [{ id: log.id, updated_at: existing.updated_at }] : [],
-        [{ id: log.id, updated_at: log.updated_at }],
-      );
-      if (!existing || merged.changed > 0) {
-        upsertLocalLog({
-          id: log.id,
-          flock_id: log.flock_id,
-          date: log.date,
-          mortality: log.mortality,
-          cull: log.cull,
-          feed_kg: log.feed_kg,
-          water_liter: log.water_liter,
-          avg_temp: log.avg_temp,
-          pending: 0,
-          updated_at: log.updated_at,
-        });
-        changed += 1;
-      }
+
+      const existing = logByKey(log.flock_id, log.date);
+      const decision = decideLogMerge(existing, log);
+      if (decision !== "write") continue;
+
+      upsertLocalLog({
+        id: log.id,
+        flock_id: log.flock_id,
+        date: log.date,
+        mortality: log.mortality,
+        cull: log.cull,
+        feed_kg: log.feed_kg,
+        water_liter: log.water_liter,
+        avg_temp: log.avg_temp,
+        pending: 0,
+        updated_at: log.updated_at,
+      });
+      changed += 1;
     }
 
     setValue("syncCursor", data.serverTime);

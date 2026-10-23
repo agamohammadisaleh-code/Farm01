@@ -42,10 +42,13 @@ export function openDb(): SQLite.SQLiteDatabase {
     );
 
     -- ثبت‌های روزانه محلی (آینه‌ای از سرور + ثبت‌های در صف)
+    -- کلید طبیعی (گله، تاریخ) است، نه شناسه سرور: قاعده کسب‌وکار می‌گوید
+    -- هر گله در هر روز یک ثبت دارد. اگر کلید شناسه سرور بود، ثبت محلیِ
+    -- همان روز با رکورد همگام‌شده تصادم می‌کرد.
     CREATE TABLE IF NOT EXISTS logs (
-      id TEXT PRIMARY KEY NOT NULL,
       flock_id TEXT NOT NULL,
       date TEXT NOT NULL,
+      id TEXT,
       mortality INTEGER NOT NULL DEFAULT 0,
       cull INTEGER NOT NULL DEFAULT 0,
       feed_kg REAL NOT NULL DEFAULT 0,
@@ -54,9 +57,9 @@ export function openDb(): SQLite.SQLiteDatabase {
       feed_type TEXT,
       notes TEXT,
       updated_at TEXT,
-      pending INTEGER NOT NULL DEFAULT 0
+      pending INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (flock_id, date)
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS logs_flock_date ON logs (flock_id, date);
 
     CREATE TABLE IF NOT EXISTS flocks (
       id TEXT PRIMARY KEY NOT NULL,
@@ -85,7 +88,39 @@ export function openDb(): SQLite.SQLiteDatabase {
       fetched_at TEXT NOT NULL
     );
   `);
+
+  migrate(db);
   return db;
+}
+
+/**
+ * مهاجرت محلی. شماره نسخه در `PRAGMA user_version` نگه داشته می‌شود.
+ * نسخه ۱: کلید جدول ثبت‌ها از «شناسه» به «گله + تاریخ» تغییر کرد.
+ */
+function migrate(database: SQLite.SQLiteDatabase): void {
+  const row = database.getFirstSync<{ user_version: number }>("PRAGMA user_version");
+  const version = row?.user_version ?? 0;
+  if (version >= 1) return;
+
+  database.execSync(`
+    DROP TABLE IF EXISTS logs;
+    CREATE TABLE logs (
+      flock_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      id TEXT,
+      mortality INTEGER NOT NULL DEFAULT 0,
+      cull INTEGER NOT NULL DEFAULT 0,
+      feed_kg REAL NOT NULL DEFAULT 0,
+      water_liter REAL NOT NULL DEFAULT 0,
+      avg_temp REAL,
+      feed_type TEXT,
+      notes TEXT,
+      updated_at TEXT,
+      pending INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (flock_id, date)
+    );
+    PRAGMA user_version = 1;
+  `);
 }
 
 /* ---------------------------------- kv ---------------------------------- */
@@ -163,7 +198,8 @@ export function saveQueue(state: QueueState): void {
 /* ------------------------------- ثبت روزانه ------------------------------- */
 
 export interface LocalLog {
-  id: string;
+  /** شناسه سمت سرور؛ برای ثبتِ در صف هنوز وجود ندارد */
+  id: string | null;
   flock_id: string;
   date: string;
   mortality: number;
@@ -177,16 +213,17 @@ export interface LocalLog {
 
 export function upsertLocalLog(log: Omit<LocalLog, "pending"> & { pending?: number }): void {
   openDb().runSync(
-    `INSERT INTO logs (id, flock_id, date, mortality, cull, feed_kg, water_liter, avg_temp, updated_at, pending)
+    `INSERT INTO logs (flock_id, date, id, mortality, cull, feed_kg, water_liter, avg_temp, updated_at, pending)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
+     ON CONFLICT(flock_id, date) DO UPDATE SET
+       id = COALESCE(excluded.id, logs.id),
        mortality = excluded.mortality, cull = excluded.cull, feed_kg = excluded.feed_kg,
        water_liter = excluded.water_liter, avg_temp = excluded.avg_temp,
        updated_at = excluded.updated_at, pending = excluded.pending`,
     [
-      log.id,
       log.flock_id,
       log.date,
+      log.id ?? null,
       log.mortality,
       log.cull,
       log.feed_kg,
@@ -211,11 +248,27 @@ export function recentLogs(flockId: string, limit = 14): LocalLog[] {
   );
 }
 
-export function clearPendingFlag(id: string, serverUpdatedAt?: string): void {
-  openDb().runSync("UPDATE logs SET pending = 0, updated_at = COALESCE(?, updated_at) WHERE id = ?", [
-    serverUpdatedAt ?? null,
-    id,
-  ]);
+/** پس از تأیید سرور: ثبت دیگر «در صف» نیست و شناسه سرور را می‌گیرد */
+export function clearPendingFlag(flockId: string, date: string, serverId?: string | null): void {
+  openDb().runSync(
+    "UPDATE logs SET pending = 0, id = COALESCE(?, id), updated_at = ? WHERE flock_id = ? AND date = ?",
+    [serverId ?? null, new Date().toISOString(), flockId, date],
+  );
+}
+
+export function deleteLocalLogByServerId(id: string): void {
+  openDb().runSync("DELETE FROM logs WHERE id = ?", [id]);
+}
+
+export function logByKey(flockId: string, date: string): LocalLog | null {
+  return openDb().getFirstSync<LocalLog>("SELECT * FROM logs WHERE flock_id = ? AND date = ?", [flockId, date]) ?? null;
+}
+
+export function localLogKeys(flockId: string): { flock_id: string; date: string }[] {
+  return openDb().getAllSync<{ flock_id: string; date: string }>(
+    "SELECT flock_id, date FROM logs WHERE flock_id = ?",
+    [flockId],
+  );
 }
 
 /* -------------------------------- گله‌ها -------------------------------- */

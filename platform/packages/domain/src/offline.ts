@@ -273,3 +273,37 @@ export function mergeByUpdatedAt<T extends WithUpdatedAt>(
 export function clearQueue(state: QueueState): QueueState {
   return { operations: [], lastSyncedAt: state.lastSyncedAt };
 }
+
+/* ------------------------- حل تعارض ثبت روزانه ------------------------- */
+
+export interface LocalLogSnapshot {
+  /** ستون pending=1 یعنی این ثبت هنوز در صف است و به سرور نرسیده */
+  pending?: number;
+  updated_at?: string | null;
+}
+
+export type LogMergeDecision = "write" | "keep-local" | "skip" | "delete";
+
+/**
+ * تصمیم ادغام یک ثبت روزانه سرور با نسخه محلی.
+ *
+ * سه قاعده، به همین ترتیب:
+ * ۱. حذف در سرور، حذف محلی است (tombstone).
+ * ۲. ثبتِ در صف همیشه برنده است؛ وگرنه کاربر مقداری را که تازه وارد کرده و
+ *    هنوز ارسال نشده، با نسخه قدیمی سرور از دست می‌دهد.
+ * ۳. در غیر این صورت، نسخه با `updated_at` جدیدتر می‌نویسد.
+ *
+ * «دوباره‌نویسی بی‌دلیل» (skip) هم عمدی است: از رفرش بی‌پایان و از
+ * بازنویسی اثری که کاربر روی صفحه می‌بیند جلوگیری می‌کند.
+ */
+export function decideLogMerge(
+  local: LocalLogSnapshot | null,
+  remote: { updated_at?: string | null; deleted?: boolean } | null,
+): LogMergeDecision {
+  if (remote?.deleted) return "delete";
+  if (!remote) return "skip";
+  if (!local) return "write";
+  if (local.pending === 1) return "keep-local";
+  if ((remote.updated_at ?? "") > (local.updated_at ?? "")) return "write";
+  return "skip";
+}
