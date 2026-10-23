@@ -36,8 +36,11 @@ jobs:
       - name: بررسی نوع‌های اپ موبایل
         run: npm run typecheck:mobile
 
-      - name: تست دامنه و API
+      - name: تست دامنه، API و وب
         run: npm test
+
+      - name: ساخت داشبورد وب
+        run: npm run build:web
 
   ai-service:
     runs-on: ubuntu-latest

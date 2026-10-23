@@ -12,15 +12,23 @@
   },
   "scripts": {
     "build:domain": "npm run build -w @farm/domain",
-    "test": "npm run test -w @farm/domain && npm run test -w @farm/api",
+    "test": "npm run test -w @farm/domain && npm run test -w @farm/api && npm run test -w @farm/web",
     "test:domain": "npm run test -w @farm/domain",
     "test:api": "npm run test -w @farm/api",
     "dev:api": "npm run start:dev -w @farm/api",
     "db:generate": "npm run db:generate -w @farm/api",
     "db:migrate": "npm run db:migrate -w @farm/api",
-    "typecheck": "npm run typecheck -w @farm/domain && npm run typecheck -w @farm/api",
+    "typecheck": "npm run typecheck -w @farm/domain && npm run typecheck -w @farm/api && npm run typecheck -w @farm/web",
     "test:ai": "cd services/ai && python -m pytest -q",
     "typecheck:mobile": "npm run typecheck -w @farm/mobile",
-    "start:mobile": "npm run start -w @farm/mobile"
+    "start:mobile": "npm run start -w @farm/mobile",
+    "dev:web": "npm run dev -w @farm/web",
+    "build:web": "npm run build -w @farm/web",
+    "typecheck:web": "npm run typecheck -w @farm/web",
+    "test:web": "npm run test -w @farm/web"
+  },
+  "devDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }
