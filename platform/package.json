@@ -19,6 +19,8 @@
     "db:generate": "npm run db:generate -w @farm/api",
     "db:migrate": "npm run db:migrate -w @farm/api",
     "typecheck": "npm run typecheck -w @farm/domain && npm run typecheck -w @farm/api",
-    "test:ai": "cd services/ai && python -m pytest -q"
+    "test:ai": "cd services/ai && python -m pytest -q",
+    "typecheck:mobile": "npm run typecheck -w @farm/mobile",
+    "start:mobile": "npm run start -w @farm/mobile"
   }
 }

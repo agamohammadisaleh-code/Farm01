@@ -15,6 +15,7 @@ import { ReportsModule } from "./reports/reports.module";
 import { AiModule } from "./ai/ai.module";
 import { FarmsModule } from "./farms/farms.module";
 import { AssistantModule } from "./assistant/assistant.module";
+import { SyncModule } from "./sync/sync.module";
 import { DatabaseModule } from "./db/db.module";
 import { HealthController } from "./health.controller";
 
@@ -37,6 +38,7 @@ import { HealthController } from "./health.controller";
     ReportsModule,
     AiModule,
     AssistantModule,
+    SyncModule,
   ],
   controllers: [HealthController],
 })

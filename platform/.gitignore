@@ -5,3 +5,11 @@ coverage/
 .env
 .env.local
 .pgdata/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.mobileprovision

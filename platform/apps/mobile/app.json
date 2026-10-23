@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "مرغ‌یار",
+    "slug": "morghyar",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ir.farm.morghyar",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "برای ثبت داده با صدا"
+      }
+    },
+    "android": {
+      "package": "ir.farm.morghyar",
+      "permissions": ["RECORD_AUDIO", "POST_NOTIFICATIONS"],
+      "adaptiveIcon": { "backgroundColor": "#1e8a5f" }
+    },
+    "plugins": ["expo-notifications", "expo-secure-store"],
+    "extra": {
+      "apiUrl": "http://localhost:3000",
+      "aiUrl": "http://localhost:8000"
+    }
+  }
+}

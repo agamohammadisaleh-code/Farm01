@@ -6,3 +6,6 @@ export * from "./format";
 export * from "./metrics";
 export * from "./uniformity";
 export * from "./persian-intent";
+export * from "./permissions";
+export * from "./offline";
+export * from "./notifications";

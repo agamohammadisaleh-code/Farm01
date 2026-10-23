@@ -33,6 +33,9 @@ jobs:
       - name: بررسی نوع‌ها
         run: npm run typecheck
 
+      - name: بررسی نوع‌های اپ موبایل
+        run: npm run typecheck:mobile
+
       - name: تست دامنه و API
         run: npm test
 

@@ -1118,6 +1118,153 @@ describe("Farm API (e2e)", () => {
     });
   });
 
+  describe("همگام‌سازی آفلاین موبایل (بخش ۷)", () => {
+    const op = (clientId: string, overrides: Record<string, unknown> = {}) => ({
+      clientId,
+      type: "log.save",
+      flockId,
+      payload: { date: yesterday, mortality: 3, feedKg: 70, waterLiter: 140 },
+      ...overrides,
+    });
+
+    it("عملیات صف روی سرور ثبت می‌شود", async () => {
+      const res = await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(ownerToken))
+        .send({ operations: [op("client-00000001")] })
+        .expect(201);
+
+      expect(res.body.applied).toBe(1);
+      expect(res.body.results[0].status).toBe("applied");
+      expect(res.body.results[0].entityId).toBeDefined();
+
+      const logs = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      const row = logs.body.find((l: any) => l.date === yesterday);
+      expect(row.mortality).toBe(3);
+    });
+
+    it("ارسال دوباره همان عملیات، ثبت دوم نمی‌سازد", async () => {
+      const before = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      const res = await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(ownerToken))
+        .send({ operations: [op("client-00000001")] })
+        .expect(201);
+
+      expect(res.body.duplicates).toBe(1);
+      expect(res.body.applied).toBe(0);
+      const after = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      expect(after.body.length).toBe(before.body.length);
+    });
+
+    it("خطای یک عملیات، بقیه صف را متوقف نمی‌کند", async () => {
+      const res = await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(ownerToken))
+        .send({
+          operations: [
+            op("client-00000002", { payload: { date: twoDaysAgo, mortality: 999_999, feedKg: 10 } }),
+            op("client-00000003", { payload: { date: today, mortality: 1, feedKg: 60, waterLiter: 130 } }),
+          ],
+        })
+        .expect(201);
+
+      expect(res.body.failed).toBe(1);
+      expect(res.body.applied).toBe(1);
+      const failed = res.body.results.find((r: any) => r.clientId === "client-00000002");
+      expect(failed.status).toBe("failed");
+      expect(failed.error).toContain("زنده");
+    });
+
+    it("نقش در هر عملیات بررسی می‌شود: کارگر ثبت روزانه دارد، هزینه نه", async () => {
+      const workerLog = await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(workerToken))
+        .send({ operations: [op("client-00000004", { payload: { date: startDate, mortality: 0, feedKg: 5, waterLiter: 10 } })] })
+        .expect(201);
+      expect(workerLog.body.applied).toBe(1);
+
+      const workerExpense = await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(workerToken))
+        .send({
+          operations: [
+            {
+              clientId: "client-00000005",
+              type: "expense.create",
+              flockId,
+              payload: { date: yesterday, category: "feed", description: "خرید دان", amount: 1_000_000 },
+            },
+          ],
+        })
+        .expect(201);
+      expect(workerExpense.body.failed).toBe(1);
+      expect(workerExpense.body.results[0].error).toContain("مالک و مدیر");
+
+      const managerExpense = await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(ownerToken))
+        .send({
+          operations: [
+            {
+              clientId: "client-00000006",
+              type: "expense.create",
+              flockId,
+              payload: { date: yesterday, category: "feed", description: "خرید دان تست", amount: 1_000_000 },
+            },
+          ],
+        })
+        .expect(201);
+      expect(managerExpense.body.applied).toBe(1);
+    });
+
+    it("دریافت افزایشی، داده مزرعه را با زمان سرور می‌دهد", async () => {
+      const res = await request(server).get("/api/v1/sync/pull").set(auth(ownerToken)).expect(200);
+
+      expect(res.body.serverTime).toBeDefined();
+      expect(res.body.flocks.length).toBeGreaterThan(0);
+      expect(res.body.flocks[0].id).toBeDefined();
+      expect(res.body.settings.market_price).toBeDefined();
+      expect(Array.isArray(res.body.logs)).toBe(true);
+
+      // از زمان سرور به بعد، هیچ تغییری نیست
+      const again = await request(server)
+        .get(`/api/v1/sync/pull?since=${encodeURIComponent(res.body.serverTime)}`)
+        .set(auth(ownerToken))
+        .expect(200);
+      expect(again.body.logs.length).toBe(0);
+      expect(again.body.expenses.length).toBe(0);
+    });
+
+    it("حذف روی سرور به گوشی به شکل tombstone می‌رسد", async () => {
+      const before = await request(server).get("/api/v1/sync/pull").set(auth(ownerToken)).expect(200);
+      const logs = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      const target = logs.body.find((l: any) => l.date === today);
+
+      await request(server).delete(`/api/v1/flocks/${flockId}/logs/${target.id}`).set(auth(ownerToken)).expect(200);
+
+      const after = await request(server)
+        .get(`/api/v1/sync/pull?since=${encodeURIComponent(before.body.serverTime)}`)
+        .set(auth(ownerToken))
+        .expect(200);
+      const tombstone = after.body.logs.find((l: any) => l.id === target.id);
+      expect(tombstone.deleted).toBe(true);
+    });
+
+    it("همگام‌سازی بدون توکن رد می‌شود", async () => {
+      await request(server).post("/api/v1/sync/push").send({ operations: [] }).expect(401);
+      await request(server).get("/api/v1/sync/pull").expect(401);
+    });
+
+    it("عملیات با نوع ناشناخته با ۴۰۰ رد می‌شود", async () => {
+      await request(server)
+        .post("/api/v1/sync/push")
+        .set(auth(ownerToken))
+        .send({ operations: [{ clientId: "client-00000009", type: "flock.delete", flockId, payload: {} }] })
+        .expect(400);
+    });
+  });
+
   describe("مدیریت کاربران", () => {
     it("کاربر نام خود را ویرایش می‌کند", async () => {
       const res = await request(server).patch("/api/v1/auth/me").set(auth(ownerToken)).send({ name: "مالک جدید" }).expect(200);
