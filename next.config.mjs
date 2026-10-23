@@ -7,6 +7,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   eslint: { ignoreDuringBuilds: true },
+  allowedDevOrigins: ["*.e2b.app", "localhost", "127.0.0.1"],
   webpack(config) {
     config.resolve.alias = { ...(config.resolve.alias || {}), "@": root };
     return config;
