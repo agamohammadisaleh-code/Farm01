@@ -44,11 +44,13 @@ describe("Farm API (e2e)", () => {
   let workerToken = "";
   let vetToken = "";
   let farmId = "";
-  let cycleId = "";
+  let hallId = "";
+  let flockId = "";
 
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
   const today = new Date().toISOString().slice(0, 10);
-  const placement = new Date(Date.now() - 20 * 86400_000).toISOString().slice(0, 10);
+  const startDate = new Date(Date.now() - 20 * 86400_000).toISOString().slice(0, 10);
+  const twoDaysAgo = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
 
   before(async () => {
@@ -112,11 +114,11 @@ describe("Farm API (e2e)", () => {
     });
 
     it("ورود بدون توکن به مسیرهای محافظت‌شده ۴۰۱ می‌دهد", async () => {
-      await request(server).get("/api/v1/cycles").expect(401);
+      await request(server).get("/api/v1/flocks").expect(401);
     });
 
     it("توکن نامعتبر ۴۰۱ می‌دهد", async () => {
-      await request(server).get("/api/v1/cycles").set(auth("not-a-token")).expect(401);
+      await request(server).get("/api/v1/flocks").set(auth("not-a-token")).expect(401);
     });
   });
 
@@ -159,16 +161,47 @@ describe("Farm API (e2e)", () => {
     });
   });
 
-  describe("دوره‌ها", () => {
-    it("مالک دوره جدید می‌سازد و هزینه جوجه خودکار ثبت می‌شود", async () => {
+  describe("سالن‌ها", () => {
+    it("مالک سالن با ظرفیت می‌سازد", async () => {
       const res = await request(server)
-        .post("/api/v1/cycles")
+        .post("/api/v1/halls")
+        .set(auth(ownerToken))
+        .send({ name: "سالن ۱", capacity: 12000 })
+        .expect(201);
+      expect(res.body.name).toBe("سالن ۱");
+      expect(res.body.capacity).toBe(12000);
+      hallId = res.body.id;
+    });
+
+    it("نام تکراری سالن رد می‌شود", async () => {
+      await request(server)
+        .post("/api/v1/halls")
+        .set(auth(ownerToken))
+        .send({ name: "سالن ۱", capacity: 5000 })
+        .expect(409);
+    });
+
+    it("کارگر نمی‌تواند سالن بسازد", async () => {
+      await request(server).post("/api/v1/halls").set(auth(workerToken)).send({ name: "سالن ۳", capacity: 100 }).expect(403);
+    });
+
+    it("فهرست سالن‌ها ظرفیت و اشغال را نشان می‌دهد", async () => {
+      const res = await request(server).get("/api/v1/halls").set(auth(ownerToken)).expect(200);
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].capacity).toBe(12000);
+    });
+  });
+
+  describe("گله‌ها", () => {
+    it("مالک گله جدید می‌سازد و هزینه جوجه خودکار ثبت می‌شود", async () => {
+      const res = await request(server)
+        .post("/api/v1/flocks")
         .set(auth(ownerToken))
         .send({
-          name: "دوره پاییزه",
-          house: "سالن ۱",
+          hallId: hallId,
+          name: "گله پاییزه",
           breed: "راس ۳۰۸",
-          placementDate: placement,
+          startDate: startDate,
           initialCount: 10000,
           chickPrice: 27000,
           targetWeightG: 2500,
@@ -178,9 +211,9 @@ describe("Farm API (e2e)", () => {
 
       expect(res.body.id).toBeDefined();
       expect(res.body.initial_count).toBe(10000);
-      cycleId = res.body.id;
+      flockId = res.body.id;
 
-      const costs = await request(server).get(`/api/v1/cycles/${cycleId}/costs`).set(auth(ownerToken)).expect(200);
+      const costs = await request(server).get(`/api/v1/flocks/${flockId}/expenses`).set(auth(ownerToken)).expect(200);
       expect(costs.body).toHaveLength(1);
       expect(costs.body[0].category).toBe("chick");
       expect(costs.body[0].amount).toBe(10000 * 27000);
@@ -189,47 +222,68 @@ describe("Farm API (e2e)", () => {
     it("تاریخ جوجه‌ریزی در آینده رد می‌شود", async () => {
       const future = new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10);
       const res = await request(server)
-        .post("/api/v1/cycles")
+        .post("/api/v1/flocks")
         .set(auth(ownerToken))
-        .send({ name: "آینده", placementDate: future, initialCount: 1000 })
+        .send({ hallId, name: "آینده", startDate: future, initialCount: 1000 })
         .expect(400);
-      expect(res.body.errors?.placementDate).toBeDefined();
+      expect(res.body.errors?.startDate).toBeDefined();
     });
 
     it("تعداد جوجه خارج از بازه رد می‌شود", async () => {
       await request(server)
-        .post("/api/v1/cycles")
+        .post("/api/v1/flocks")
         .set(auth(ownerToken))
-        .send({ name: "نامعتبر", placementDate: placement, initialCount: 5 })
+        .send({ hallId, name: "نامعتبر", startDate: startDate, initialCount: 5 })
         .expect(400);
     });
 
     it("کارگر نمی‌تواند دوره بسازد (۴۰۳)", async () => {
       await request(server)
-        .post("/api/v1/cycles")
+        .post("/api/v1/flocks")
         .set(auth(workerToken))
-        .send({ name: "کارگر", placementDate: placement, initialCount: 1000 })
+        .send({ hallId, name: "کارگر", startDate: startDate, initialCount: 1000 })
         .expect(403);
     });
 
-    it("همه نقش‌ها می‌توانند دوره‌ها را بخوانند", async () => {
+    it("ظرفیت سالن کنترل می‌شود", async () => {
+      const res = await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(ownerToken))
+        .send({ hallId, name: "بیش از ظرفیت", startDate: startDate, initialCount: 99999 })
+        .expect(400);
+      expect(res.body.errors?.initialCount).toBeDefined();
+    });
+
+    it("سالن مزرعه دیگر قابل استفاده نیست", async () => {
+      const other = await request(server)
+        .post("/api/v1/auth/register")
+        .send({ email: "h2@farm.ir", password: "Secret1234", name: "دیگری", farmName: "مزرعه دو" })
+        .expect(201);
+      await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(other.body.accessToken))
+        .send({ hallId, name: "نفوذ", startDate: startDate, initialCount: 1000 })
+        .expect(404);
+    });
+
+    it("همه نقش‌ها می‌توانند گله‌ها را بخوانند", async () => {
       for (const token of [ownerToken, workerToken, vetToken]) {
-        const res = await request(server).get("/api/v1/cycles").set(auth(token)).expect(200);
+        const res = await request(server).get("/api/v1/flocks").set(auth(token)).expect(200);
         expect(res.body.length).toBeGreaterThan(0);
       }
     });
 
     it("دوره ناموجود ۴۰۴ می‌دهد", async () => {
-      await request(server).get("/api/v1/cycles/00000000-0000-0000-0000-000000000000").set(auth(ownerToken)).expect(404);
+      await request(server).get("/api/v1/flocks/00000000-0000-0000-0000-000000000000").set(auth(ownerToken)).expect(404);
     });
   });
 
   describe("ثبت روزانه", () => {
     it("ثبت روزانه با اعداد اعشاری و ذخیره صحیح", async () => {
       const res = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/logs`)
+        .post(`/api/v1/flocks/${flockId}/logs`)
         .set(auth(workerToken))
-        .send({ date: placement, mortality: 5, culls: 1, feedKg: 120.5, waterL: 240, tempC: 28.5, avgWeightG: 195 })
+        .send({ date: startDate, mortality: 5, cull: 1, feedKg: 120.5, waterLiter: 240, avgTemp: 28.5, feedType: "دان آغازین" })
         .expect(201);
 
       expect(res.body.mortality).toBe(5);
@@ -239,15 +293,15 @@ describe("Farm API (e2e)", () => {
 
     it("ثبت دوباره همان روز رکورد را به‌روزرسانی می‌کند، نه تکرار", async () => {
       const res = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/logs`)
+        .post(`/api/v1/flocks/${flockId}/logs`)
         .set(auth(workerToken))
-        .send({ date: placement, mortality: 9, culls: 0, feedKg: 130, waterL: 250 })
+        .send({ date: startDate, mortality: 9, cull: 0, feedKg: 130, waterLiter: 250, feedType: "دان آغازین" })
         .expect(201);
 
       expect(res.body.updated).toBe(true);
 
-      const list = await request(server).get(`/api/v1/cycles/${cycleId}/logs`).set(auth(ownerToken)).expect(200);
-      const sameDay = list.body.filter((l: any) => l.date === placement);
+      const list = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      const sameDay = list.body.filter((l: any) => l.date === startDate);
       expect(sameDay).toHaveLength(1);
       expect(sameDay[0].mortality).toBe(9);
     });
@@ -255,7 +309,7 @@ describe("Farm API (e2e)", () => {
     it("ثبت تاریخ آینده رد می‌شود", async () => {
       const future = new Date(Date.now() + 86400_000).toISOString().slice(0, 10);
       const res = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/logs`)
+        .post(`/api/v1/flocks/${flockId}/logs`)
         .set(auth(workerToken))
         .send({ date: future, mortality: 1, feedKg: 10 })
         .expect(400);
@@ -264,7 +318,7 @@ describe("Farm API (e2e)", () => {
 
     it("تلفات بیشتر از موجودی زنده رد می‌شود", async () => {
       const res = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/logs`)
+        .post(`/api/v1/flocks/${flockId}/logs`)
         .set(auth(workerToken))
         .send({ date: yesterday, mortality: 99_999, feedKg: 10 })
         .expect(400);
@@ -273,28 +327,28 @@ describe("Farm API (e2e)", () => {
 
     it("دامپزشک می‌تواند ثبت کند ولی کارگر به هزینه دسترسی ندارد", async () => {
       await request(server)
-        .post(`/api/v1/cycles/${cycleId}/logs`)
+        .post(`/api/v1/flocks/${flockId}/logs`)
         .set(auth(vetToken))
-        .send({ date: yesterday, mortality: 2, feedKg: 200, waterL: 380 })
+        .send({ date: yesterday, mortality: 2, feedKg: 200, waterLiter: 380, feedType: "دان آغازین" })
         .expect(201);
 
-      await request(server).get(`/api/v1/cycles/${cycleId}/costs`).set(auth(workerToken)).expect(403);
-      await request(server).get(`/api/v1/cycles/${cycleId}/costs`).set(auth(vetToken)).expect(403);
+      await request(server).get(`/api/v1/flocks/${flockId}/expenses`).set(auth(workerToken)).expect(403);
+      await request(server).get(`/api/v1/flocks/${flockId}/expenses`).set(auth(vetToken)).expect(403);
     });
   });
 
   describe("هزینه و فروش", () => {
     it("هزینه ثبت می‌شود و کارگر نمی‌تواند ثبت کند", async () => {
-      const payload = { date: yesterday, category: "feed", description: "خرید دان", amount: 33_500_000, quantity: 1000, unit: "کیلوگرم" };
-      await request(server).post(`/api/v1/cycles/${cycleId}/costs`).set(auth(workerToken)).send(payload).expect(403);
+      const payload = { date: yesterday, category: "feed", description: "خرید دان", amount: 33_500_000, quantity: 1000, unit: "کیلوگرم", feedType: "دان آغازین" };
+      await request(server).post(`/api/v1/flocks/${flockId}/expenses`).set(auth(workerToken)).send(payload).expect(403);
 
-      const res = await request(server).post(`/api/v1/cycles/${cycleId}/costs`).set(auth(ownerToken)).send(payload).expect(201);
+      const res = await request(server).post(`/api/v1/flocks/${flockId}/expenses`).set(auth(ownerToken)).send(payload).expect(201);
       expect(res.body.amount).toBe(33_500_000);
     });
 
     it("مبلغ صفر و شرح کوتاه رد می‌شود", async () => {
       const res = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/costs`)
+        .post(`/api/v1/flocks/${flockId}/expenses`)
         .set(auth(ownerToken))
         .send({ date: yesterday, category: "other", description: "x", amount: 0 })
         .expect(400);
@@ -303,26 +357,220 @@ describe("Farm API (e2e)", () => {
 
     it("فروش بیش از موجودی رد و فروش مجاز ثبت می‌شود", async () => {
       const bad = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/sales`)
+        .post(`/api/v1/flocks/${flockId}/sales`)
         .set(auth(ownerToken))
-        .send({ date: today, count: 999_999, weightKg: 100, pricePerKg: 98000 })
+        .send({ date: today, count: 999_999, totalWeightKg: 100, pricePerKg: 98000 })
         .expect(400);
       expect(bad.body.errors?.count).toBeDefined();
 
       const good = await request(server)
-        .post(`/api/v1/cycles/${cycleId}/sales`)
+        .post(`/api/v1/flocks/${flockId}/sales`)
         .set(auth(ownerToken))
-        .send({ date: today, count: 500, weightKg: 1100, pricePerKg: 98000, buyer: "کشتارگاه" })
+        .send({ date: today, count: 500, totalWeightKg: 1100, pricePerKg: 98000, buyer: "کشتارگاه" })
         .expect(201);
       expect(good.body.count).toBe(500);
       expect(good.body.price_per_kg).toBe(98000);
     });
   });
 
+
+  describe("وزن‌گیری نمونه‌ای", () => {
+    it("نمونه وزن ثبت می‌شود و منبع وزن گله قرار می‌گیرد", async () => {
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/weights`)
+        .set(auth(workerToken))
+        .send({ date: yesterday, sampleCount: 120, avgWeightGr: 1050 })
+        .expect(201);
+      expect(res.body.avg_weight_gr).toBe(1050);
+      expect(res.body.sample_count).toBe(120);
+
+      const metrics = await request(server).get(`/api/v1/analytics/flocks/${flockId}`).set(auth(ownerToken)).expect(200);
+      expect(metrics.body.measuredWeightG).toBe(1050);
+      expect(metrics.body.lastSampleCount).toBe(120);
+      expect(metrics.body.weighCount).toBe(1);
+    });
+
+    it("تعداد یا وزن نامعتبر رد می‌شود", async () => {
+      await request(server)
+        .post(`/api/v1/flocks/${flockId}/weights`)
+        .set(auth(workerToken))
+        .send({ date: yesterday, sampleCount: 0, avgWeightGr: 5000 })
+        .expect(400);
+    });
+
+    it("وزن‌گیری با تاریخ آینده رد می‌شود", async () => {
+      const future = new Date(Date.now() + 86400_000).toISOString().slice(0, 10);
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/weights`)
+        .set(auth(workerToken))
+        .send({ date: future, sampleCount: 100, avgWeightGr: 1200 })
+        .expect(400);
+      expect(res.body.errors?.date).toBeDefined();
+    });
+
+    it("فهرست وزن‌گیری‌ها مرتب برمی‌گردد", async () => {
+      const res = await request(server).get(`/api/v1/flocks/${flockId}/weights`).set(auth(vetToken)).expect(200);
+      expect(res.body).toHaveLength(1);
+    });
+  });
+
+  describe("سلامت: واکسن و دارو", () => {
+    it("واکسن آینده به‌صورت برنامه‌ریزی‌شده ثبت می‌شود", async () => {
+      const soon = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10);
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/vaccinations`)
+        .set(auth(vetToken))
+        .send({ name: "نیوکاسل", scheduledDate: soon })
+        .expect(201);
+      expect(res.body.status).toBe("scheduled");
+      expect(res.body.effective_status).toBe("scheduled");
+      expect(res.body.days_until).toBe(2);
+    });
+
+    it("واکسن عقب‌افتاده با وضعیت مؤثر overdue شناسایی می‌شود", async () => {
+      const past = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/vaccinations`)
+        .set(auth(vetToken))
+        .send({ name: "برونشیت", scheduledDate: past })
+        .expect(201);
+      expect(res.body.effective_status).toBe("overdue");
+    });
+
+    it("انجام واکسن، تاریخ انجام و وضعیت را ثبت می‌کند", async () => {
+      const list = await request(server).get(`/api/v1/flocks/${flockId}/vaccinations`).set(auth(vetToken)).expect(200);
+      const overdue = list.body.find((v: any) => v.effective_status === "overdue");
+      const res = await request(server)
+        .patch(`/api/v1/flocks/${flockId}/vaccinations/${overdue.id}`)
+        .set(auth(vetToken))
+        .send({ status: "done" })
+        .expect(200);
+      expect(res.body.status).toBe("done");
+      expect(res.body.done_date).toBe(today);
+    });
+
+    it("دارو با دوره پرهیز ثبت می‌شود و در خلاصه سلامت دیده می‌شود", async () => {
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/medications`)
+        .set(auth(vetToken))
+        .send({ name: "اکسی‌تتراسایکلین", dose: "۱ گرم در لیتر", startDate: today, endDate: today, withdrawalDays: 7 })
+        .expect(201);
+      expect(res.body.withdrawal_days).toBe(7);
+
+      const summary = await request(server).get(`/api/v1/flocks/${flockId}/health`).set(auth(ownerToken)).expect(200);
+      expect(summary.body.medications).toHaveLength(1);
+      expect(summary.body.activeWithdrawal).toHaveLength(1);
+      expect(summary.body.overdue).toHaveLength(0);
+    });
+
+    it("کارگر نمی‌تواند واکسن یا دارو ثبت کند", async () => {
+      await request(server)
+        .post(`/api/v1/flocks/${flockId}/vaccinations`)
+        .set(auth(workerToken))
+        .send({ name: "تست", scheduledDate: today })
+        .expect(403);
+      await request(server)
+        .post(`/api/v1/flocks/${flockId}/medications`)
+        .set(auth(workerToken))
+        .send({ name: "تست", dose: "۱", startDate: today })
+        .expect(403);
+    });
+
+    it("تاریخ شروع دارو در آینده رد می‌شود", async () => {
+      const future = new Date(Date.now() + 5 * 86400_000).toISOString().slice(0, 10);
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/medications`)
+        .set(auth(vetToken))
+        .send({ name: "دارو", dose: "۱", startDate: future })
+        .expect(400);
+      expect(res.body.errors?.startDate).toBeDefined();
+    });
+  });
+
+  describe("انبار دان", () => {
+    it("خرید دان موجودی را افزایش می‌دهد", async () => {
+      // نوع دان تازه تا موجودی از صفر شروع شود و اثر خرید خالص سنجیده شود
+      const before = await request(server).get("/api/v1/farm/inventory").set(auth(ownerToken)).expect(200);
+      expect(before.body.find((r: any) => r.feed_type === "دان رشد")).toBeUndefined();
+
+      await request(server)
+        .post(`/api/v1/flocks/${flockId}/expenses`)
+        .set(auth(ownerToken))
+        .send({
+          date: today,
+          category: "feed",
+          description: "خرید دان رشد",
+          amount: 33_500_000,
+          quantity: 1500,
+          unit: "کیلوگرم",
+          feedType: "دان رشد",
+        })
+        .expect(201);
+
+      const after = await request(server).get("/api/v1/farm/inventory").set(auth(ownerToken)).expect(200);
+      const row = after.body.find((r: any) => r.feed_type === "دان رشد");
+      expect(row).toBeDefined();
+      expect(row.quantity_kg).toBeCloseTo(1500, 1);
+    });
+
+    it("ثبت روزانه از انبار کسر می‌کند و ویرایش دوباره کسر نمی‌کند", async () => {
+      const before = await request(server).get("/api/v1/farm/inventory").set(auth(ownerToken)).expect(200);
+      const b = before.body.find((r: any) => r.feed_type === "دان آغازین").quantity_kg;
+
+      // همان روز با مقدار بیشتر → فقط اختلاف کسر می‌شود
+      await request(server)
+        .post(`/api/v1/flocks/${flockId}/logs`)
+        .set(auth(workerToken))
+        .send({ date: yesterday, mortality: 2, feedKg: 260, waterLiter: 380, feedType: "دان آغازین" })
+        .expect(201);
+
+      const after = await request(server).get("/api/v1/farm/inventory").set(auth(ownerToken)).expect(200);
+      const a = after.body.find((r: any) => r.feed_type === "دان آغازین").quantity_kg;
+      expect(b - a).toBeCloseTo(60, 1); // ۲۶۰ − ۲۰۰
+    });
+
+    it("اصلاح دستی موجودی را منفی نمی‌کند", async () => {
+      const res = await request(server)
+        .post("/api/v1/farm/inventory/adjust")
+        .set(auth(ownerToken))
+        .send({ feedType: "دان آغازین", deltaKg: -999999, reason: "ضایعات" })
+        .expect(400);
+      expect(String(res.body.message).includes("منفی")).toBe(true);
+    });
+
+    it("کمبود انبار به‌صورت منفی گزارش می‌شود، نه صفر", async () => {
+      // مصرف بدون خرید هم‌نوع: موجودی باید منفی شود تا کمبود دیده شود
+      const res = await request(server)
+        .post(`/api/v1/flocks/${flockId}/logs`)
+        .set(auth(workerToken))
+        .send({ date: twoDaysAgo, mortality: 0, feedKg: 50, feedType: "دان بدون خرید" })
+        .expect(201);
+      expect(res.body.updated).toBe(false);
+
+      const inv = await request(server).get("/api/v1/farm/inventory").set(auth(ownerToken)).expect(200);
+      const row = inv.body.find((r: any) => r.feed_type === "دان بدون خرید");
+      expect(row.quantity_kg).toBeCloseTo(-50, 1);
+    });
+
+    it("کارگر می‌تواند اصلاح گزارش کند ولی تعیین قطعی نه", async () => {
+      await request(server)
+        .post("/api/v1/farm/inventory/adjust")
+        .set(auth(workerToken))
+        .send({ feedType: "دان آغازین", deltaKg: 10 })
+        .expect(201);
+      await request(server)
+        .post("/api/v1/farm/inventory/set")
+        .set(auth(workerToken))
+        .send({ feedType: "دان آغازین", quantityKg: 5000 })
+        .expect(403);
+    });
+  });
+
   describe("تحلیل و شاخص‌ها", () => {
     it("متریک دوره شامل FCR، تلفات و پیش‌بینی است", async () => {
-      const res = await request(server).get(`/api/v1/analytics/cycles/${cycleId}`).set(auth(ownerToken)).expect(200);
+      const res = await request(server).get(`/api/v1/analytics/flocks/${flockId}`).set(auth(ownerToken)).expect(200);
       expect(res.body.liveBirds).toBe(10000 - 9 - 2 - 500);
+      expect(res.body.flock.id).toBe(flockId);
       expect(res.body.mortalityPct).toBeCloseTo(0.11, 1);
       expect(res.body.fcr).not.toBeNull();
       expect(res.body.projection.targetAge).toBe(42);
@@ -370,14 +618,14 @@ describe("Farm API (e2e)", () => {
         .send({ email: "other@farm.ir", password: "Secret1234", name: "مالک دوم", farmName: "مزرعه دیگر" })
         .expect(201);
 
-      const res = await request(server).get(`/api/v1/cycles/${cycleId}`).set(auth(other.body.accessToken)).expect(404);
-      expect(res.body.message).toBe("دوره یافت نشد.");
+      const res = await request(server).get(`/api/v1/flocks/${flockId}`).set(auth(other.body.accessToken)).expect(404);
+      expect(res.body.message).toBe("گله یافت نشد.");
     });
   });
 
   describe("حذف و چرخه نشست", () => {
     it("کارگر نمی‌تواند دوره را حذف کند", async () => {
-      await request(server).delete(`/api/v1/cycles/${cycleId}`).set(auth(workerToken)).expect(403);
+      await request(server).delete(`/api/v1/flocks/${flockId}`).set(auth(workerToken)).expect(403);
     });
 
     it("توکن تازه‌سازی توکن دسترسی جدید می‌دهد و قابل استفاده مجدد نیست", async () => {
@@ -395,23 +643,23 @@ describe("Farm API (e2e)", () => {
       // توکن قبلی پس از چرخش باطل است
       await request(server).post("/api/v1/auth/refresh").send({ refreshToken: login.body.refreshToken }).expect(401);
 
-      await request(server).get("/api/v1/cycles").set(auth(rotated.body.accessToken)).expect(200);
+      await request(server).get("/api/v1/flocks").set(auth(rotated.body.accessToken)).expect(200);
     });
 
     it("مالک دوره را حذف نرم می‌کند و شمارش‌ها به‌روز می‌شود", async () => {
       const temp = await request(server)
-        .post("/api/v1/cycles")
+        .post("/api/v1/flocks")
         .set(auth(ownerToken))
-        .send({ name: "قابل حذف", placementDate: placement, initialCount: 1000 })
+        .send({ hallId, name: "قابل حذف", startDate: startDate, initialCount: 1000 })
         .expect(201);
 
-      await request(server).delete(`/api/v1/cycles/${temp.body.id}`).set(auth(ownerToken)).expect(200);
+      await request(server).delete(`/api/v1/flocks/${temp.body.id}`).set(auth(ownerToken)).expect(200);
 
-      const list = await request(server).get("/api/v1/cycles").set(auth(ownerToken)).expect(200);
+      const list = await request(server).get("/api/v1/flocks").set(auth(ownerToken)).expect(200);
       expect(list.body.find((c: any) => c.id === temp.body.id)).toBeUndefined();
 
-      const res = await request(server).get(`/api/v1/cycles/${temp.body.id}`).set(auth(ownerToken)).expect(404);
-      expect(res.body.message).toBe("دوره یافت نشد.");
+      const res = await request(server).get(`/api/v1/flocks/${temp.body.id}`).set(auth(ownerToken)).expect(404);
+      expect(res.body.message).toBe("گله یافت نشد.");
     });
 
     it("سلامت سرویس", async () => {

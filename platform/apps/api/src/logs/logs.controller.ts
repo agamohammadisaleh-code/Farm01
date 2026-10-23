@@ -11,25 +11,25 @@ import { SaveLogDto } from "./logs.dto";
 @ApiTags("logs")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller("cycles/:cycleId/logs")
+@Controller("flocks/:flockId/logs")
 export class LogsController {
   constructor(private readonly service: LogsService) {}
 
   @Get()
   @Roles("owner", "manager", "worker", "vet")
-  list(@CurrentUser() user: AuthUser, @Param("cycleId") cycleId: string) {
-    return this.service.list(user.farmId, cycleId);
+  list(@CurrentUser() user: AuthUser, @Param("flockId") flockId: string) {
+    return this.service.list(user.farmId, flockId);
   }
 
   @Post()
   @Roles("owner", "manager", "worker", "vet")
-  save(@CurrentUser() user: AuthUser, @Param("cycleId") cycleId: string, @Body() dto: SaveLogDto) {
-    return this.service.save(user.farmId, user.id, cycleId, dto);
+  save(@CurrentUser() user: AuthUser, @Param("flockId") flockId: string, @Body() dto: SaveLogDto) {
+    return this.service.save(user.farmId, user.id, flockId, dto);
   }
 
   @Delete(":id")
   @Roles("owner", "manager")
-  remove(@CurrentUser() user: AuthUser, @Param("cycleId") cycleId: string, @Param("id") id: string) {
-    return this.service.remove(user.farmId, cycleId, id);
+  remove(@CurrentUser() user: AuthUser, @Param("flockId") flockId: string, @Param("id") id: string) {
+    return this.service.remove(user.farmId, flockId, id);
   }
 }

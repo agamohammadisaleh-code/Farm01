@@ -1,9 +1,13 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule } from "./auth/auth.module";
-import { CyclesModule } from "./cycles/cycles.module";
+import { FlocksModule } from "./flocks/flocks.module";
+import { HallsModule } from "./halls/halls.module";
 import { LogsModule } from "./logs/logs.module";
-import { CostsModule } from "./costs/costs.module";
+import { WeightSamplesModule } from "./weight-samples/weight-samples.module";
+import { HealthModule } from "./health/health.module";
+import { InventoryModule } from "./inventory/inventory.module";
+import { ExpensesModule } from "./expenses/expenses.module";
 import { SalesModule } from "./sales/sales.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { FarmsModule } from "./farms/farms.module";
@@ -16,10 +20,14 @@ import { HealthController } from "./health.controller";
     DatabaseModule,
     AuthModule,
     FarmsModule,
-    CyclesModule,
+    HallsModule,
+    FlocksModule,
     LogsModule,
-    CostsModule,
+    WeightSamplesModule,
+    HealthModule,
+    ExpensesModule,
     SalesModule,
+    InventoryModule,
     AnalyticsModule,
   ],
   controllers: [HealthController],

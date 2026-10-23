@@ -5,15 +5,15 @@ import { RolesGuard } from "../auth/roles.guard";
 import { Roles } from "../common/roles";
 import { CurrentUser } from "../auth/current-user.decorator";
 import type { AuthUser } from "../auth/auth.types";
-import { CyclesService } from "./cycles.service";
-import { CreateCycleDto, UpdateCycleDto } from "./cycles.dto";
+import { HallsService } from "./halls.service";
+import { CreateHallDto, UpdateHallDto } from "./halls.dto";
 
-@ApiTags("cycles")
+@ApiTags("halls")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller("cycles")
-export class CyclesController {
-  constructor(private readonly service: CyclesService) {}
+@Controller("halls")
+export class HallsController {
+  constructor(private readonly service: HallsService) {}
 
   @Get()
   @Roles("owner", "manager", "worker", "vet")
@@ -27,22 +27,16 @@ export class CyclesController {
     return this.service.get(user.farmId, id);
   }
 
-  @Get(":id/stats")
-  @Roles("owner", "manager", "worker", "vet")
-  stats(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.service.stats(user.farmId, id);
-  }
-
   @Post()
   @Roles("owner", "manager")
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateCycleDto) {
-    return this.service.create(user.farmId, user.id, dto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateHallDto) {
+    return this.service.create(user.farmId, dto);
   }
 
   @Patch(":id")
   @Roles("owner", "manager")
-  update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateCycleDto) {
-    return this.service.update(user.farmId, user.id, id, dto);
+  update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() dto: UpdateHallDto) {
+    return this.service.update(user.farmId, id, dto);
   }
 
   @Delete(":id")

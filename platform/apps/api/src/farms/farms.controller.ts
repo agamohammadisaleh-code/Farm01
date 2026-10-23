@@ -6,7 +6,7 @@ import { Roles } from "../common/roles";
 import { CurrentUser } from "../auth/current-user.decorator";
 import type { AuthUser } from "../auth/auth.types";
 import { FarmsService } from "./farms.service";
-import { AddMemberDto, UpdateSettingsDto } from "./farms.dto";
+import { AddMemberDto, CreateFarmDto, UpdateSettingsDto } from "./farms.dto";
 
 @ApiTags("farm")
 @ApiBearerAuth()
@@ -18,6 +18,12 @@ export class FarmsController {
   @Get()
   get(@CurrentUser() user: AuthUser) {
     return this.service.get(user.farmId);
+  }
+
+  @Post()
+  @Roles("owner", "manager")
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateFarmDto) {
+    return this.service.create(user.id, dto);
   }
 
   @Get("settings")

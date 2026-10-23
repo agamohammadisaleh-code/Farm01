@@ -12,22 +12,22 @@ import { CreateSaleDto } from "./sales.dto";
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles("owner", "manager")
-@Controller("cycles/:cycleId/sales")
+@Controller("flocks/:flockId/sales")
 export class SalesController {
   constructor(private readonly service: SalesService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Param("cycleId") cycleId: string) {
-    return this.service.list(user.farmId, cycleId);
+  list(@CurrentUser() user: AuthUser, @Param("flockId") flockId: string) {
+    return this.service.list(user.farmId, flockId);
   }
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @Param("cycleId") cycleId: string, @Body() dto: CreateSaleDto) {
-    return this.service.create(user.farmId, user.id, cycleId, dto);
+  create(@CurrentUser() user: AuthUser, @Param("flockId") flockId: string, @Body() dto: CreateSaleDto) {
+    return this.service.create(user.farmId, user.id, flockId, dto);
   }
 
   @Delete(":id")
-  remove(@CurrentUser() user: AuthUser, @Param("cycleId") cycleId: string, @Param("id") id: string) {
-    return this.service.remove(user.farmId, cycleId, id);
+  remove(@CurrentUser() user: AuthUser, @Param("flockId") flockId: string, @Param("id") id: string) {
+    return this.service.remove(user.farmId, flockId, id);
   }
 }

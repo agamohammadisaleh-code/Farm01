@@ -1,16 +1,39 @@
-import type { Cost, CostCategory, Cycle, DailyLog, FarmSettings, Sale } from "@farm/domain";
+import type {
+  DailyLog,
+  Expense,
+  FarmSettings,
+  FeedInventory,
+  Flock,
+  Hall,
+  Medication,
+  Sale,
+  Vaccination,
+  WeightSample,
+} from "@farm/domain";
 import { isoDate, isoDateTime, money, n, nOrNull } from "./parse";
 
 /** نگاشت ردیف پایگاه داده (numeric به رشته، date به Date) به نوع دامنه */
 
-export function toCycle(r: any): Cycle {
+export function toHall(r: any): Hall {
   return {
     id: r.id,
     farm_id: r.farmId,
     name: r.name,
-    house: r.house ?? "",
+    capacity: n(r.capacity),
+    created_at: isoDateTime(r.createdAt),
+    updated_at: isoDateTime(r.updatedAt),
+    deleted_at: r.deletedAt ? isoDateTime(r.deletedAt) : null,
+  };
+}
+
+export function toFlock(r: any): Flock {
+  return {
+    id: r.id,
+    farm_id: r.farmId,
+    hall_id: r.hallId,
+    name: r.name,
     breed: r.breed,
-    placement_date: isoDate(r.placementDate),
+    start_date: isoDate(r.startDate),
     initial_count: n(r.initialCount),
     chick_price: money(r.chickPrice),
     target_weight_g: n(r.targetWeightG),
@@ -28,16 +51,13 @@ export function toCycle(r: any): Cycle {
 export function toLog(r: any): DailyLog {
   return {
     id: r.id,
-    farm_id: r.farmId,
-    cycle_id: r.cycleId,
+    flock_id: r.flockId,
     date: isoDate(r.date),
     mortality: n(r.mortality),
-    culls: n(r.culls),
+    cull: n(r.cull),
     feed_kg: n(r.feedKg),
-    water_l: n(r.waterL),
-    temp_c: nOrNull(r.tempC),
-    avg_weight_g: nOrNull(r.avgWeightG),
-    feed_type: r.feedType,
+    water_liter: n(r.waterLiter),
+    avg_temp: nOrNull(r.avgTemp),
     notes: r.notes,
     created_by: r.createdBy,
     created_at: isoDateTime(r.createdAt),
@@ -46,15 +66,60 @@ export function toLog(r: any): DailyLog {
   };
 }
 
-export function toCost(r: any): Cost {
+export function toWeightSample(r: any): WeightSample {
   return {
     id: r.id,
-    farm_id: r.farmId,
-    cycle_id: r.cycleId,
+    flock_id: r.flockId,
     date: isoDate(r.date),
-    category: r.category as CostCategory,
-    description: r.description,
+    sample_count: n(r.sampleCount),
+    avg_weight_gr: n(r.avgWeightGr),
+    notes: r.notes,
+    created_by: r.createdBy,
+    created_at: isoDateTime(r.createdAt),
+    updated_at: isoDateTime(r.updatedAt),
+    deleted_at: r.deletedAt ? isoDateTime(r.deletedAt) : null,
+  };
+}
+
+export function toVaccination(r: any): Vaccination {
+  return {
+    id: r.id,
+    flock_id: r.flockId,
+    name: r.name,
+    scheduled_date: isoDate(r.scheduledDate),
+    done_date: r.doneDate ? isoDate(r.doneDate) : null,
+    status: r.status,
+    notes: r.notes,
+    created_at: isoDateTime(r.createdAt),
+    updated_at: isoDateTime(r.updatedAt),
+    deleted_at: r.deletedAt ? isoDateTime(r.deletedAt) : null,
+  };
+}
+
+export function toMedication(r: any): Medication {
+  return {
+    id: r.id,
+    flock_id: r.flockId,
+    name: r.name,
+    dose: r.dose,
+    start_date: isoDate(r.startDate),
+    end_date: r.endDate ? isoDate(r.endDate) : null,
+    withdrawal_days: nOrNull(r.withdrawalDays),
+    notes: r.notes,
+    created_at: isoDateTime(r.createdAt),
+    updated_at: isoDateTime(r.updatedAt),
+    deleted_at: r.deletedAt ? isoDateTime(r.deletedAt) : null,
+  };
+}
+
+export function toExpense(r: any): Expense {
+  return {
+    id: r.id,
+    flock_id: r.flockId,
+    date: isoDate(r.date),
+    category: r.category,
     amount: money(r.amount),
+    description: r.description,
     quantity: nOrNull(r.quantity),
     unit: r.unit,
     vendor: r.vendor,
@@ -68,19 +133,28 @@ export function toCost(r: any): Cost {
 export function toSale(r: any): Sale {
   return {
     id: r.id,
-    farm_id: r.farmId,
-    cycle_id: r.cycleId,
+    flock_id: r.flockId,
     date: isoDate(r.date),
-    count: n(r.count),
-    weight_kg: n(r.weightKg),
+    total_weight_kg: n(r.totalWeightKg),
     price_per_kg: money(r.pricePerKg),
-    deductions: money(r.deductions),
     buyer: r.buyer,
+    count: nOrNull(r.count),
+    deductions: money(r.deductions),
     notes: r.notes,
     created_by: r.createdBy,
     created_at: isoDateTime(r.createdAt),
     updated_at: isoDateTime(r.updatedAt),
     deleted_at: r.deletedAt ? isoDateTime(r.deletedAt) : null,
+  };
+}
+
+export function toFeedInventory(r: any): FeedInventory {
+  return {
+    id: r.id,
+    farm_id: r.farmId,
+    feed_type: r.feedType,
+    quantity_kg: n(r.quantityKg),
+    updated_at: isoDateTime(r.updatedAt),
   };
 }
 

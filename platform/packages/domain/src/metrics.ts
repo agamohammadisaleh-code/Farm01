@@ -1,6 +1,13 @@
 import { faDigits, formatJalali, isoDaysBetween, todayIso } from "./jalali";
 import { standardAt } from "./standards";
-import type { Cost, CostCategory, Cycle, DailyLog, Sale } from "./types";
+import type {
+  CostCategory,
+  DailyLog,
+  Expense,
+  Flock,
+  Sale,
+  WeightSample,
+} from "./types";
 
 export const COST_CATEGORIES: { key: CostCategory; label: string; color: string; icon: string }[] = [
   { key: "chick", label: "جوجه یک‌روزه", color: "#2f7d5b", icon: "🐣" },
@@ -22,10 +29,13 @@ export function categoryColor(key: string): string {
   return COST_CATEGORIES.find((c) => c.key === key)?.color ?? "#8a8f98";
 }
 
-export function cycleAgeDays(cycle: Cycle, today = todayIso()): number {
-  const end = cycle.closed_date ?? today;
-  return Math.max(1, isoDaysBetween(cycle.placement_date, end) + 1);
+export function flockAgeDays(flock: Flock, today = todayIso()): number {
+  const end = flock.closed_date ?? today;
+  return Math.max(1, isoDaysBetween(flock.start_date, end) + 1);
 }
+
+/** نام قدیمی (سازگاری با کد موجود) */
+export const cycleAgeDays = flockAgeDays;
 
 export type AlertSeverity = "critical" | "warning" | "info" | "good";
 
@@ -58,7 +68,7 @@ export interface Projection {
 }
 
 export interface CycleMetrics {
-  cycle: Cycle;
+  flock: Flock;
   ageDays: number;
   targetAge: number;
   daysRemaining: number;
@@ -81,6 +91,9 @@ export interface CycleMetrics {
   weightSource: "measured" | "projected" | "none";
   lastWeighDate: string | null;
   measuredWeightG: number | null;
+  /** تعداد قطعه وزن‌شده در آخرین نمونه (اعتبار آماری) */
+  lastSampleCount: number | null;
+  weighCount: number;
   dailyGainG: number;
   stdWeightG: number;
   stdCumFeedG: number;
@@ -158,28 +171,29 @@ export function expectedMortalityPct(age: number): number {
 const CHICK_START_WEIGHT_G = 42;
 
 export function computeMetrics(
-  cycle: Cycle,
+  flock: Flock,
   logs: DailyLog[],
-  costs: Cost[],
+  expenses: Expense[],
   sales: Sale[],
   opts: { today?: string; marketPrice: number; feedPrice: number },
+  weights: WeightSample[] = [],
 ): CycleMetrics {
   const today = opts.today ?? todayIso();
-  const ageDays = cycleAgeDays(cycle, today);
-  const targetAge = cycle.status === "closed" ? ageDays : Math.max(21, Math.min(70, cycle.target_age_days || 42));
+  const ageDays = flockAgeDays(flock, today);
+  const targetAge = flock.status === "closed" ? ageDays : Math.max(21, Math.min(70, flock.target_age_days || 42));
   const daysRemaining = Math.max(0, targetAge - ageDays);
 
   const mortalityTotal = logs.reduce((s, l) => s + (l.mortality || 0), 0);
-  const cullsTotal = logs.reduce((s, l) => s + (l.culls || 0), 0);
+  const cullsTotal = logs.reduce((s, l) => s + (l.cull || 0), 0);
   const lostBirds = mortalityTotal + cullsTotal;
   const soldBirds = sales.reduce((s, x) => s + (x.count || 0), 0);
-  const liveBirds = Math.max(0, cycle.initial_count - lostBirds - soldBirds);
-  const mortalityPct = cycle.initial_count ? (lostBirds / cycle.initial_count) * 100 : 0;
+  const liveBirds = Math.max(0, flock.initial_count - lostBirds - soldBirds);
+  const mortalityPct = flock.initial_count ? (lostBirds / flock.initial_count) * 100 : 0;
   const expectedMortPct = expectedMortalityPct(ageDays);
 
   const totalFeedKg = logs.reduce((s, l) => s + (l.feed_kg || 0), 0);
-  const totalWaterL = logs.reduce((s, l) => s + (l.water_l || 0), 0);
-  const purchasedFeedKg = costs
+  const totalWaterL = logs.reduce((s, l) => s + (l.water_liter || 0), 0);
+  const purchasedFeedKg = expenses
     .filter((c) => c.category === "feed" && c.date <= today)
     .reduce((s, c) => s + (c.quantity || 0), 0);
   const feedStockKg = Math.max(0, purchasedFeedKg - totalFeedKg);
@@ -191,28 +205,33 @@ export function computeMetrics(
   const expectedDailyFeedKg = (liveBirds * standardAt(ageDays).dailyFeedG) / 1000;
   const feedDaysLeft = expectedDailyFeedKg > 0 ? feedStockKg / expectedDailyFeedKg : 0;
 
-  const weights = logs.filter((l) => l.avg_weight_g != null && l.avg_weight_g! > 0);
-  const lastWeigh = weights.at(-1) ?? null;
+  // وزن‌گیری‌ها منبع رسمی وزن‌اند؛ وزن‌های ثبت‌شده در لاگ روزانه در مدل جدید
+  // وجود ندارند و از weight_samples خوانده می‌شوند.
+  const sortedWeights = [...weights]
+    .filter((w) => (w.avg_weight_gr ?? 0) > 0)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const lastWeigh = sortedWeights.at(-1) ?? null;
   const stdNow = standardAt(ageDays);
   const stdWeightG = stdNow.weightG;
-  const measuredWeightG = lastWeigh?.avg_weight_g ?? null;
+  const measuredWeightG = lastWeigh?.avg_weight_gr ?? null;
+  const lastSampleCount = lastWeigh?.sample_count ?? null;
   let currentWeightG = stdWeightG;
   let weightSource: CycleMetrics["weightSource"] = "none";
   if (measuredWeightG) {
-    const daysSinceWeigh = Math.max(0, isoDaysBetween(lastWeigh!.date, cycle.closed_date ?? today));
+    const daysSinceWeigh = Math.max(0, isoDaysBetween(lastWeigh!.date, flock.closed_date ?? today));
     currentWeightG = Math.round(measuredWeightG + daysSinceWeigh * Math.min(75, standardAt(ageDays).weightG * 0.028));
     weightSource = daysSinceWeigh <= 2 ? "measured" : "projected";
-  } else if (weights.length === 0) {
+  } else {
     currentWeightG = Math.round(stdWeightG * 0.97);
     weightSource = "projected";
   }
 
   let dailyGainG = 0;
-  if (weights.length >= 2) {
-    const a = weights[Math.max(0, weights.length - 4)];
-    const b = weights.at(-1)!;
+  if (sortedWeights.length >= 2) {
+    const a = sortedWeights[Math.max(0, sortedWeights.length - 4)];
+    const b = sortedWeights.at(-1)!;
     const dd = isoDaysBetween(a.date, b.date);
-    dailyGainG = dd > 0 ? Math.round((b.avg_weight_g! - a.avg_weight_g!) / dd) : 0;
+    dailyGainG = dd > 0 ? Math.round((b.avg_weight_gr - a.avg_weight_gr) / dd) : 0;
   } else if (ageDays > 7) {
     dailyGainG = Math.round(stdNow.weightG * 0.028 * 0.97);
   }
@@ -221,15 +240,15 @@ export function computeMetrics(
   const weightVsStdPct = stdWeightG ? ((currentWeightG - stdWeightG) / stdWeightG) * 100 : 0;
 
   const liveBiomassKg = (liveBirds * currentWeightG) / 1000;
-  const soldWeightKg = sales.reduce((s, x) => s + (x.weight_kg || 0), 0);
+  const soldWeightKg = sales.reduce((s, x) => s + (x.total_weight_kg || 0), 0);
   const producedKg = liveBiomassKg + soldWeightKg;
   const fcr = totalFeedKg > 0 && producedKg > 0.001 ? totalFeedKg / producedKg : null;
   // استاندارد گله: ضریب تبدیل نژاد با احتساب تلفات (خوراک پرندگان تلف‌شده)
   const stdFcr = standardAt(ageDays).fcr * (1 + mortalityPct / 100);
-  const feedVsStdPct = stdNow.cumFeedG && logs.length ? ((totalFeedKg * 1000 / Math.max(1, cycle.initial_count) - stdNow.cumFeedG) / stdNow.cumFeedG) * 100 : 0;
+  const feedVsStdPct = stdNow.cumFeedG && logs.length ? ((totalFeedKg * 1000 / Math.max(1, flock.initial_count) - stdNow.cumFeedG) / stdNow.cumFeedG) * 100 : 0;
 
-  const cashCost = costs.reduce((s, c) => s + (c.amount || 0), 0);
-  const feedPurchases = costs.filter((c) => c.category === "feed");
+  const cashCost = expenses.reduce((s, c) => s + (c.amount || 0), 0);
+  const feedPurchases = expenses.filter((c) => c.category === "feed");
   const feedPurchaseCost = feedPurchases.reduce((s, c) => s + (c.amount || 0), 0);
   const feedPurchaseQty = feedPurchases.reduce((s, c) => s + (c.quantity || 0), 0);
   const avgFeedUnitCost = feedPurchaseQty > 0 ? feedPurchaseCost / feedPurchaseQty : opts.feedPrice || 33500;
@@ -238,7 +257,7 @@ export function computeMetrics(
   // هزینه دوره بر مبنای «مصرف» است، نه خرید انبار
   const totalCost = Math.max(0, cashCost - feedPurchaseCost + consumedFeedCost);
   const byCat = new Map<string, number>();
-  for (const c of costs) {
+  for (const c of expenses) {
     if (c.category === "feed") continue;
     byCat.set(c.category, (byCat.get(c.category) ?? 0) + (c.amount || 0));
   }
@@ -252,17 +271,17 @@ export function computeMetrics(
   const feedCost = consumedFeedCost;
   const feedCostShare = totalCost ? (feedCost / totalCost) * 100 : 0;
 
-  const revenue = sales.reduce((s, x) => s + Math.max(0, x.weight_kg * x.price_per_kg - (x.deductions || 0)), 0);
+  const revenue = sales.reduce((s, x) => s + Math.max(0, x.total_weight_kg * x.price_per_kg - (x.deductions || 0)), 0);
   const avgSalePricePerKg = soldWeightKg > 0 ? revenue / soldWeightKg : null;
   const marketPrice = opts.marketPrice || 0;
   const estimatedLiveValue = liveBiomassKg * marketPrice;
 
-  const costPerBird = cycle.initial_count ? totalCost / cycle.initial_count : 0;
+  const costPerBird = flock.initial_count ? totalCost / flock.initial_count : 0;
   const costPerKgLive = producedKg > 0.01 ? totalCost / producedKg : null;
 
   const realizedRevenue = revenue;
   const netProfit = realizedRevenue - totalCost;
-  const profitPerBird = cycle.initial_count ? netProfit / cycle.initial_count : 0;
+  const profitPerBird = flock.initial_count ? netProfit / flock.initial_count : 0;
   const marginPct = realizedRevenue > 0 ? (netProfit / realizedRevenue) * 100 : 0;
   const breakevenPerKg = producedKg > 0.01 ? totalCost / producedKg : null;
 
@@ -275,7 +294,7 @@ export function computeMetrics(
 
   const stdCumNowG = stdNow.cumFeedG;
   const stdCumTargetG = standardAt(projAge).cumFeedG;
-  const perBirdConsumedG = logs.length ? (totalFeedKg * 1000) / Math.max(1, cycle.initial_count) : stdCumNowG;
+  const perBirdConsumedG = logs.length ? (totalFeedKg * 1000) / Math.max(1, flock.initial_count) : stdCumNowG;
   const feedPerf = Math.min(1.15, Math.max(0.88, perBirdConsumedG / Math.max(1, stdCumNowG)));
   const remainingConsumptionKg = ((liveBirds + soldBirds * 0.15) * Math.max(0, stdCumTargetG - stdCumNowG) * feedPerf) / 1000;
   const projectedFeedKg = totalFeedKg + Math.max(0, remainingConsumptionKg);
@@ -289,35 +308,37 @@ export function computeMetrics(
   const projectedBiomassKg = (liveBirds * projWeight) / 1000 + soldWeightKg;
   const projectedRevenue = projectedBiomassKg * (avgSalePricePerKg ?? marketPrice);
   const projectedProfit = projectedRevenue - projectedCost;
-  const projectedGainKg = Math.max(0.001, projectedBiomassKg - (cycle.initial_count * CHICK_START_WEIGHT_G) / 1000);
+  const projectedGainKg = Math.max(0.001, projectedBiomassKg - (flock.initial_count * CHICK_START_WEIGHT_G) / 1000);
   const projectedFcr = projectedBiomassKg > 0 ? projectedFeedKg / projectedGainKg : 0;
 
   // سری زمانی روزانه
-  let live = cycle.initial_count;
+  let live = flock.initial_count;
   let cumFeed = 0;
+  const weighByDate = new Map(sortedWeights.map((w) => [w.date, w.avg_weight_gr]));
   const dailySeries: DailySeriesPoint[] = logs.map((l, i) => {
-    live = Math.max(0, live - (l.mortality || 0) - (l.culls || 0));
+    live = Math.max(0, live - (l.mortality || 0) - (l.cull || 0));
     cumFeed += l.feed_kg || 0;
     const day = i + 1;
     const std = standardAt(day);
+    const weighed = weighByDate.get(l.date) ?? null;
     return {
       day,
       date: l.date,
-      weightG: l.avg_weight_g ?? std.weightG * 0.97,
+      weightG: weighed ?? std.weightG * 0.97,
       stdWeightG: std.weightG,
       feedKg: l.feed_kg || 0,
       stdDailyFeedKg: (std.dailyFeedG * live) / 1000,
       mortality: l.mortality || 0,
       liveBirds: live,
       cumFeedKg: cumFeed,
-      stdCumFeedKg: (std.cumFeedG * cycle.initial_count) / 1000,
-      waterL: l.water_l || 0,
-      tempC: l.temp_c ?? null,
-      avgWeightG: l.avg_weight_g ?? null,
+      stdCumFeedKg: (std.cumFeedG * flock.initial_count) / 1000,
+      waterL: l.water_liter || 0,
+      tempC: l.avg_temp ?? null,
+      avgWeightG: weighed,
     };
   });
 
-  const sortedCosts = [...costs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const sortedCosts = [...expenses].sort((a, b) => (a.date < b.date ? -1 : 1));
   let cum = 0;
   const costTimeline = sortedCosts.map((c) => {
     cum += c.amount || 0;
@@ -325,7 +346,7 @@ export function computeMetrics(
   });
 
   const alerts = buildAlerts({
-    cycle,
+    flock,
     ageDays,
     mortalityPct,
     expectedMortalityPct: expectedMortPct,
@@ -342,17 +363,17 @@ export function computeMetrics(
     totalFeedKg,
     totalWaterL,
     currentWeightG,
-    targetWeightG: cycle.target_weight_g,
+    targetWeightG: flock.target_weight_g,
     costPerKgLive,
     marketPrice,
     daysRemaining,
     targetAge,
-    tempC: logs.at(-1)?.temp_c ?? null,
+    tempC: logs.at(-1)?.avg_temp ?? null,
     recentMortalityAvg: last7.length ? last7.reduce((s, l) => s + l.mortality, 0) / last7.length : 0,
   });
 
   return {
-    cycle,
+    flock,
     ageDays,
     targetAge,
     daysRemaining,
@@ -375,6 +396,8 @@ export function computeMetrics(
     weightSource,
     lastWeighDate: lastWeigh?.date ?? null,
     measuredWeightG,
+    lastSampleCount,
+    weighCount: sortedWeights.length,
     dailyGainG,
     stdWeightG,
     stdCumFeedG: stdNow.cumFeedG,
@@ -401,7 +424,7 @@ export function computeMetrics(
     marginPct,
     breakevenPerKg,
     marketPrice,
-    targetWeightG: cycle.target_weight_g,
+    targetWeightG: flock.target_weight_g,
     projection: {
       targetAge: projAge,
       daysRemaining: remainingDays,
@@ -419,7 +442,7 @@ export function computeMetrics(
 }
 
 function buildAlerts(x: {
-  cycle: Cycle;
+  flock: Flock;
   ageDays: number;
   mortalityPct: number;
   expectedMortalityPct: number;
@@ -455,7 +478,7 @@ function buildAlerts(x: {
       title: "ثبت روزانه به‌روز نیست",
       detail: `آخرین ثبت مربوط به ${faDigits(daysAgo)} روز پیش است. برای دقت تحلیل‌ها، آمار روزانه را کامل کنید.`,
       recommendation: "تلفات، دان مصرفی و دمای سالن امروز را ثبت کنید تا محاسبات و هشدارها دقیق بماند.",
-      action: { label: "ثبت آمار امروز", href: `/cycles/${x.cycle.id}?tab=daily` },
+      action: { label: "ثبت آمار امروز", href: `/flocks/${x.flock.id}?tab=daily` },
     });
   }
 
@@ -467,7 +490,7 @@ function buildAlerts(x: {
       detail: `تلفات روز آخر ${faDigits(last.mortality)} قطعه است، در حالی که میانگین هفت روز اخیر حدود ${faDigits(x.recentMortalityAvg.toFixed(1))} قطعه بوده.`,
       recommendation:
         "علائم بالینی را بررسی کنید: وضعیت تنفس، مدفوع، دمای سالن و کیفیت آب. در صورت ادامه، با دامپزشک تماس بگیرید و کالبدشکافی نمونه انجام دهید.",
-      action: { label: "ثبت گزارش دامپزشکی", href: `/cycles/${x.cycle.id}?tab=daily` },
+      action: { label: "ثبت گزارش دامپزشکی", href: `/flocks/${x.flock.id}?tab=daily` },
     });
   }
 
@@ -479,7 +502,7 @@ function buildAlerts(x: {
       detail: `تلفات تجمعی ${faDigits(x.mortalityPct.toFixed(1))}٪ در برابر انتظار حدود ${faDigits(x.expectedMortalityPct.toFixed(1))}٪ در روز ${faDigits(x.ageDays)}. اختلاف حدود ${faDigits((x.mortalityPct - x.expectedMortalityPct).toFixed(1))} واحد درصد.`,
       recommendation:
         "علت را در سه محور بررسی کنید: کیفیت جوجه اولیه، مدیریت دما/تهویه و برنامه واکسیناسیون. تلفات ۷ روز اول بیشترین اثر را بر سود دارد.",
-      action: { label: "تحلیل تلفات", href: `/cycles/${x.cycle.id}?tab=daily` },
+      action: { label: "تحلیل تلفات", href: `/flocks/${x.flock.id}?tab=daily` },
     });
   }
 
@@ -491,7 +514,7 @@ function buildAlerts(x: {
       detail: `وزن فعلی حدود ${faDigits((100 + x.weightVsStdPct).toFixed(1))}٪ استاندارد نژاد است (${faDigits(x.weightVsStdPct.toFixed(1))}٪).`,
       recommendation:
         "دسترسی به دان و آب را بازرسی کنید، دان با کیفیت هر مرحله را کنترل و فضای دانخوری را افزایش دهید. تراکم و تهویه را بررسی کنید و وزن‌کشی هفتگی را دقیق‌تر انجام دهید.",
-      action: { label: "برنامه رشد", href: `/cycles/${x.cycle.id}?tab=growth` },
+      action: { label: "برنامه رشد", href: `/flocks/${x.flock.id}?tab=growth` },
     });
   } else if (x.ageDays >= 10 && x.weightVsStdPct > 6) {
     out.push({
@@ -511,7 +534,7 @@ function buildAlerts(x: {
       detail: `ضریب تبدیل گله ${faDigits(x.fcr.toFixed(2))} در برابر استاندارد ${faDigits(x.stdFcr.toFixed(2))}. هر ۰٫۰۱ بهبود FCR در این گله تقریباً معادل صرفه‌جویی قابل توجهی در هزینه دان است.`,
       recommendation:
         "ریزش دان و پرت خوراک را کنترل کنید، اندازه ذرات دان را با سن پرنده تطبیق دهید و برنامه دان‌دهی را بازبینی کنید.",
-      action: { label: "جزئیات خوراک", href: `/cycles/${x.cycle.id}?tab=feed` },
+      action: { label: "جزئیات خوراک", href: `/flocks/${x.flock.id}?tab=feed` },
     });
   }
 
@@ -525,7 +548,7 @@ function buildAlerts(x: {
           ? "انبار دان خالی است و گله برای وعده‌های بعدی خوراک ندارد. تأمین فوری دان ضروری است."
           : `موجودی انبار حدود ${faDigits(x.feedStockKg.toFixed(0))} کیلوگرم است؛ با مصرف فعلی فقط ${faDigits(x.feedDaysLeft.toFixed(1))} روز کافی است.`,
       recommendation: "سفارش دان مرحله بعد را همین امروز ثبت کنید تا قطع ناگهانی خوراک باعث افت رشد نشود.",
-      action: { label: "ثبت خرید دان", href: `/cycles/${x.cycle.id}?tab=costs` },
+      action: { label: "ثبت خرید دان", href: `/flocks/${x.flock.id}?tab=costs` },
     });
   }
 
@@ -559,7 +582,7 @@ function buildAlerts(x: {
       detail: `بهای تمام‌شده هر کیلوگرم وزن زنده ${Math.round(x.costPerKgLive).toLocaleString("fa-IR")} تومان و قیمت بازار ${Math.round(x.marketPrice).toLocaleString("fa-IR")} تومان است.`,
       recommendation:
         "هزینه دان را بازبینی کنید و زمان فروش را بهینه کنید. کاهش تلفات و بهبود FCR سریع‌ترین راه‌های بازگرداندن حاشیه سود هستند.",
-      action: { label: "تحلیل هزینه", href: `/cycles/${x.cycle.id}?tab=costs` },
+      action: { label: "تحلیل هزینه", href: `/flocks/${x.flock.id}?tab=costs` },
     });
   }
 
@@ -593,7 +616,7 @@ function buildAlerts(x: {
         ? `آخرین وزن‌کشی در ${formatJalali(x.lastWeighDate)} ثبت شده است.`
         : "برای این دوره هنوز وزنی ثبت نشده و مقادیر رشد تخمینی است.",
       recommendation: "هفته‌ای یک‌بار وزن‌کشی نمونه‌ای (حداقل ۱۰۰ قطعه) انجام دهید تا روند رشد و پیش‌بینی پایان دوره واقعی باشد.",
-      action: { label: "ثبت وزن", href: `/cycles/${x.cycle.id}?tab=daily` },
+      action: { label: "ثبت وزن", href: `/flocks/${x.flock.id}?tab=daily` },
     });
   }
 
@@ -605,7 +628,7 @@ function buildAlerts(x: {
       detail: `وزن فعلی ${faDigits(Math.round(x.currentWeightG))} گرم و وزن هدف ${faDigits(x.targetWeightG)} گرم است؛ ${faDigits(x.daysRemaining)} روز تا سن هدف باقی مانده.`,
       recommendation:
         "قیمت روز بازار را بررسی کنید. اگر قیمت مناسب است و رشد روزانه کمتر از هزینه دان روزانه شده، فروش زودتر از سن هدف سودآورتر است.",
-      action: { label: "ثبت فروش", href: `/cycles/${x.cycle.id}?tab=sales` },
+      action: { label: "ثبت فروش", href: `/cycles/${x.flock.id}?tab=sales` },
     });
   }
 
@@ -624,7 +647,7 @@ function buildAlerts(x: {
 }
 
 export interface CycleSummary {
-  cycle: Cycle;
+  flock: Flock;
   metrics: CycleMetrics;
 }
 
@@ -643,10 +666,10 @@ export function aggregateOverview(activeMetrics: CycleMetrics[], closedMetrics: 
   const alerts = activeMetrics.flatMap((m) =>
     m.alerts
       .filter((a) => a.severity === "critical" || a.severity === "warning")
-      .map((a) => ({ ...a, cycleId: m.cycle.id, cycleName: m.cycle.name })),
+      .map((a) => ({ ...a, cycleId: m.flock.id, cycleName: m.flock.name })),
   );
   const lostBirds = activeMetrics.reduce((s, m) => s + m.lostBirds, 0);
-  const initialBirds = activeMetrics.reduce((s, m) => s + m.cycle.initial_count, 0);
+  const initialBirds = activeMetrics.reduce((s, m) => s + m.flock.initial_count, 0);
   const mortalityPctWeighted = initialBirds > 0 ? (lostBirds / initialBirds) * 100 : 0;
   const totalFeed = activeMetrics.reduce((s, m) => s + m.totalFeedKg, 0);
   const totalCostAll =

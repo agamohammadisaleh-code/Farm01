@@ -12,9 +12,9 @@ export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
  * خواندن هزینه برای دامپزشک هم بسته است؛ فقط شاخص‌های زیستی می‌بیند.
  */
 export const PERMISSIONS = {
-  "cycle:read": ["owner", "manager", "worker", "vet"],
-  "cycle:write": ["owner", "manager"],
-  "cycle:delete": ["owner"],
+  "flock:read": ["owner", "manager", "worker", "vet"],
+  "flock:write": ["owner", "manager"],
+  "flock:delete": ["owner"],
   "log:read": ["owner", "manager", "worker", "vet"],
   // دامپزشک هم ثبت روزانه می‌کند (تلفات، دارو، دمای سالن) ولی به هزینه و فروش دسترسی ندارد
   "log:write": ["owner", "manager", "worker", "vet"],

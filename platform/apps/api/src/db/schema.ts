@@ -12,31 +12,43 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * طرح پایگاه داده PostgreSQL.
+ * طرح پایگاه داده PostgreSQL — مدل داده مصوب.
+ *
+ *   Farm ── Hall ── Flock ──┬── DailyLog
+ *     │                     ├── WeightSample
+ *     │                     ├── Vaccination
+ *     │                     ├── Medication
+ *     │                     ├── Expense
+ *     │                     └── Sale
+ *     └── FeedInventory
  *
  * قواعد طراحی:
- * - همه شناسه‌ها UUID متنی هستند تا کلاینت آفلاین بتواند پیش از اتصال رکورد بسازد
- *   و هنگام همگام‌سازی همان شناسه را ارسال کند (بدون تصادم).
- * - هر جدول قابل نوشتن `updated_at` و `deleted_at` دارد: همگام‌سازی افزایشی و
+ * - شناسه‌ها UUID متنی: کلاینت آفلاین پیش از اتصال رکورد می‌سازد و همان شناسه
+ *   را هنگام همگام‌سازی می‌فرستد (بدون تصادم و بدون تبدیل شناسه).
+ * - `updated_at` + `deleted_at` در همه جدول‌های داده: همگام‌سازی افزایشی و
  *   حذف نرم بدون از دست رفتن تاریخچه.
- * - جداسازی چندمستأجری با `farm_id` در همه جدول‌های داده و کنترل دسترسی در
- *   لایه سرویس (هیچ کوئری بدون شرط farm_id اجرا نمی‌شود).
- * - اعداد پولی `numeric(14,0)` (تومان، بدون اعشار) و کمیت‌ها `numeric(12,2)`.
+ * - چندمستأجری: `farm_id` روی مزرعه‌دارها؛ گله به سالن و سالن به مزرعه وصل
+ *   است تا مالکیت از یک مسیر قابل اعتماد مشتق شود.
+ * - مبالغ `numeric(14,0)` (تومان، بدون اعشار)؛ وزن و کمیت `numeric(12,2)`.
  */
 
 export const users = pgTable(
   "users",
   {
     id: text("id").primaryKey(),
-    email: text("email").notNull(),
-    passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
     phone: text("phone"),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    /** نقش در مزرعه اصلی */
+    role: text("role").notNull().default("owner"),
+    /** مزرعه اصلی کاربر */
+    farmId: text("farm_id"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("users_email_uq").on(t.email)],
+  (t) => [uniqueIndex("users_email_uq").on(t.email), index("users_farm_idx").on(t.farmId)],
 );
 
 export const refreshTokens = pgTable(
@@ -58,11 +70,16 @@ export const farms = pgTable("farms", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   location: text("location"),
+  ownerId: text("owner_id").references(() => users.id, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+/**
+ * عضویت چندمزرعه‌ای. `users.farm_id/role` مزرعه اصلی را نگه می‌دارد، اما
+ * منبع حقیقت دسترسی همین جدول است: یک دامپزشک ممکن است چند مزرعه داشته باشد.
+ */
 export const farmMembers = pgTable(
   "farm_members",
   {
@@ -91,21 +108,44 @@ export const farmSettings = pgTable("farm_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const cycles = pgTable(
-  "cycles",
+/* ---------------------------------- سالن ---------------------------------- */
+
+export const halls = pgTable(
+  "halls",
   {
     id: text("id").primaryKey(),
     farmId: text("farm_id")
       .notNull()
       .references(() => farms.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    house: text("house").notNull().default(""),
+    /** ظرفیت اسمی سالن (قطعه) */
+    capacity: integer("capacity").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("halls_farm_name_uq").on(t.farmId, t.name)],
+);
+
+/* ---------------------------------- گله ---------------------------------- */
+
+export const flocks = pgTable(
+  "flocks",
+  {
+    id: text("id").primaryKey(),
+    farmId: text("farm_id")
+      .notNull()
+      .references(() => farms.id, { onDelete: "cascade" }),
+    hallId: text("hall_id")
+      .notNull()
+      .references(() => halls.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
     breed: text("breed").notNull(),
-    placementDate: date("placement_date").notNull(),
+    startDate: date("start_date").notNull(),
     initialCount: integer("initial_count").notNull(),
     chickPrice: numeric("chick_price", { precision: 14, scale: 0 }).notNull().default("0"),
-    targetWeightG: integer("target_weight_g").notNull(),
-    targetAgeDays: integer("target_age_days").notNull(),
+    targetWeightG: integer("target_weight_g").notNull().default(2500),
+    targetAgeDays: integer("target_age_days").notNull().default(42),
     status: text("status").notNull().default("active"),
     closedDate: date("closed_date"),
     notes: text("notes"),
@@ -114,26 +154,33 @@ export const cycles = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("cycles_farm_idx").on(t.farmId), index("cycles_status_idx").on(t.farmId, t.status)],
+  (t) => [
+    index("flocks_farm_idx").on(t.farmId),
+    index("flocks_hall_idx").on(t.hallId),
+    index("flocks_status_idx").on(t.farmId, t.status),
+  ],
 );
+
+/* ---------------------------------- ثبت روزانه ---------------------------------- */
 
 export const dailyLogs = pgTable(
   "daily_logs",
   {
     id: text("id").primaryKey(),
-    farmId: text("farm_id")
+    flockId: text("flock_id")
       .notNull()
-      .references(() => farms.id, { onDelete: "cascade" }),
-    cycleId: text("cycle_id")
-      .notNull()
-      .references(() => cycles.id, { onDelete: "cascade" }),
+      .references(() => flocks.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
     mortality: integer("mortality").notNull().default(0),
-    culls: integer("culls").notNull().default(0),
+    cull: integer("cull").notNull().default(0),
     feedKg: numeric("feed_kg", { precision: 12, scale: 2 }).notNull().default("0"),
-    waterL: numeric("water_l", { precision: 12, scale: 2 }).notNull().default("0"),
-    tempC: numeric("temp_c", { precision: 5, scale: 1 }),
-    avgWeightG: integer("avg_weight_g"),
+    waterLiter: numeric("water_liter", { precision: 12, scale: 2 }).notNull().default("0"),
+    /** میانگین دمای سالن */
+    avgTemp: numeric("avg_temp", { precision: 5, scale: 1 }),
+    /**
+     * نوع دان مصرفی. افزوده نسبت به فهرست اولیه مدل: بدون آن، کسر خودکار از
+     * انبار به تفکیک نوع دان (آغازین/رشد/پایانی) امکان‌پذیر نیست.
+     */
     feedType: text("feed_type"),
     notes: text("notes"),
     createdBy: text("created_by"),
@@ -142,60 +189,142 @@ export const dailyLogs = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (t) => [
-    // یک ثبت در هر روز برای هر دوره — قاعده‌ای که در نسخه SQLite با مهاجرت اعمال شد
-    uniqueIndex("daily_logs_cycle_date_uq").on(t.cycleId, t.date),
-    index("daily_logs_cycle_idx").on(t.cycleId, t.date),
+    // یک ثبت در هر روز برای هر گله؛ با upsert اتمیک نگهداری می‌شود
+    uniqueIndex("daily_logs_flock_date_uq").on(t.flockId, t.date),
+    index("daily_logs_flock_idx").on(t.flockId, t.date),
   ],
 );
 
-export const costs = pgTable(
-  "costs",
-  {
-    id: text("id").primaryKey(),
-    farmId: text("farm_id")
-      .notNull()
-      .references(() => farms.id, { onDelete: "cascade" }),
-    cycleId: text("cycle_id")
-      .notNull()
-      .references(() => cycles.id, { onDelete: "cascade" }),
-    date: date("date").notNull(),
-    category: text("category").notNull(),
-    description: text("description").notNull(),
-    amount: numeric("amount", { precision: 14, scale: 0 }).notNull(),
-    quantity: numeric("quantity", { precision: 12, scale: 2 }),
-    unit: text("unit"),
-    vendor: text("vendor"),
-    createdBy: text("created_by"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
-  },
-  (t) => [index("costs_cycle_idx").on(t.cycleId, t.date)],
-);
+/* ---------------------------------- وزن‌گیری ---------------------------------- */
 
-export const sales = pgTable(
-  "sales",
+export const weightSamples = pgTable(
+  "weight_samples",
   {
     id: text("id").primaryKey(),
-    farmId: text("farm_id")
+    flockId: text("flock_id")
       .notNull()
-      .references(() => farms.id, { onDelete: "cascade" }),
-    cycleId: text("cycle_id")
-      .notNull()
-      .references(() => cycles.id, { onDelete: "cascade" }),
+      .references(() => flocks.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
-    count: integer("count").notNull(),
-    weightKg: numeric("weight_kg", { precision: 12, scale: 2 }).notNull(),
-    pricePerKg: numeric("price_per_kg", { precision: 14, scale: 0 }).notNull(),
-    deductions: numeric("deductions", { precision: 14, scale: 0 }).notNull().default("0"),
-    buyer: text("buyer"),
+    /** تعداد قطعه وزن‌شده در نمونه */
+    sampleCount: integer("sample_count").notNull().default(100),
+    /** میانگین وزن نمونه (گرم) */
+    avgWeightGr: integer("avg_weight_gr").notNull(),
     notes: text("notes"),
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("sales_cycle_idx").on(t.cycleId, t.date)],
+  (t) => [index("weight_samples_flock_idx").on(t.flockId, t.date)],
+);
+
+/* ---------------------------------- سلامت ---------------------------------- */
+
+export const vaccinations = pgTable(
+  "vaccinations",
+  {
+    id: text("id").primaryKey(),
+    flockId: text("flock_id")
+      .notNull()
+      .references(() => flocks.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    scheduledDate: date("scheduled_date").notNull(),
+    doneDate: date("done_date"),
+    /** scheduled | done | skipped — «عقب‌افتاده» از تاریخ محاسبه می‌شود */
+    status: text("status").notNull().default("scheduled"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("vaccinations_flock_idx").on(t.flockId, t.scheduledDate)],
+);
+
+export const medications = pgTable(
+  "medications",
+  {
+    id: text("id").primaryKey(),
+    flockId: text("flock_id")
+      .notNull()
+      .references(() => flocks.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    dose: text("dose").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    /** دوره پرهیز دارویی (روز) — پیش از فروش باید صفر شود */
+    withdrawalDays: integer("withdrawal_days"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("medications_flock_idx").on(t.flockId, t.startDate)],
+);
+
+/* ---------------------------------- مالی ---------------------------------- */
+
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: text("id").primaryKey(),
+    flockId: text("flock_id")
+      .notNull()
+      .references(() => flocks.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    category: text("category").notNull(),
+    amount: numeric("amount", { precision: 14, scale: 0 }).notNull(),
+    description: text("description").notNull(),
+    /** برای خرید دان: مقدار و واحد، تا انبار به‌روز شود */
+    quantity: numeric("quantity", { precision: 12, scale: 2 }),
+    unit: text("unit"),
+    vendor: text("vendor"),
+    /** برای خرید دان: نوع دان، تا افزایش/برگشت انبار دقیقاً به همان ردیف بخورد */
+    feedType: text("feed_type"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("expenses_flock_idx").on(t.flockId, t.date)],
+);
+
+export const sales = pgTable(
+  "sales",
+  {
+    id: text("id").primaryKey(),
+    flockId: text("flock_id")
+      .notNull()
+      .references(() => flocks.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    totalWeightKg: numeric("total_weight_kg", { precision: 12, scale: 2 }).notNull(),
+    pricePerKg: numeric("price_per_kg", { precision: 14, scale: 0 }).notNull(),
+    buyer: text("buyer"),
+    /** اختیاری: اگر ثبت شود، شمارش زنده دقیق‌تر می‌شود */
+    count: integer("count"),
+    deductions: numeric("deductions", { precision: 14, scale: 0 }).notNull().default("0"),
+    notes: text("notes"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("sales_flock_idx").on(t.flockId, t.date)],
+);
+
+/* ---------------------------------- انبار دان ---------------------------------- */
+
+export const feedInventory = pgTable(
+  "feed_inventory",
+  {
+    id: text("id").primaryKey(),
+    farmId: text("farm_id")
+      .notNull()
+      .references(() => farms.id, { onDelete: "cascade" }),
+    feedType: text("feed_type").notNull(),
+    quantityKg: numeric("quantity_kg", { precision: 12, scale: 2 }).notNull().default("0"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("feed_inventory_farm_type_uq").on(t.farmId, t.feedType)],
 );
 
 /** گزارش بی‌اثر بودن عملیات همگام‌سازی (idempotency) برای کلاینت آفلاین */

@@ -83,14 +83,20 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(input.password, 11);
 
     await this.db.transaction(async (tx: any) => {
+      await tx.insert(farms).values({
+        id: farmId,
+        name: input.farmName.trim().slice(0, 80),
+        ownerId: userId,
+      });
       await tx.insert(users).values({
         id: userId,
         email,
         passwordHash,
         name: input.name.trim().slice(0, 80),
         phone: input.phone?.slice(0, 20) ?? null,
+        role: "owner",
+        farmId,
       });
-      await tx.insert(farms).values({ id: farmId, name: input.farmName.trim().slice(0, 80) });
       await tx.insert(farmMembers).values({ farmId, userId, role: "owner" });
       await tx.insert(farmSettings).values({
         farmId,

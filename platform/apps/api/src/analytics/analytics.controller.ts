@@ -53,10 +53,10 @@ export class AnalyticsController {
     return data;
   }
 
-  @Get("cycles/:id")
+  @Get("flocks/:id")
   @Roles("owner", "manager", "worker", "vet")
-  async cycle(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    const m = await this.service.cycleMetrics(user.farmId, id);
+  async flock(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    const m = await this.service.flockMetrics(user.farmId, id);
     if (user.role === "worker" || user.role === "vet") {
       return {
         ...m,

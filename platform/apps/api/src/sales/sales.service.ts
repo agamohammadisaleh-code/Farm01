@@ -3,70 +3,67 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { Cycle, Sale } from "@farm/domain";
 import { DATABASE, type Database } from "../db/database";
-import { cycles, dailyLogs, sales } from "../db/schema";
+import { dailyLogs, sales } from "../db/schema";
 import { assertValid } from "../common/errors";
+import { FlockAccess } from "../common/flock-access";
 import { todayIso } from "../common/ids";
 import { n } from "../common/parse";
-import { toCycle, toSale } from "../common/mappers";
+import { toSale } from "../common/mappers";
 import type { CreateSaleDto } from "./sales.dto";
 
 @Injectable()
 export class SalesService {
-  constructor(@Inject(DATABASE) private readonly database: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly database: Database,
+    private readonly access: FlockAccess,
+  ) {}
 
   private get db(): any {
     return this.database.db;
   }
 
-  private async cycleOrThrow(farmId: string, cycleId: string): Promise<Cycle> {
-    const rows = await this.db
-      .select()
-      .from(cycles)
-      .where(and(eq(cycles.farmId, farmId), eq(cycles.id, cycleId), isNull(cycles.deletedAt)))
-      .limit(1);
-    if (!rows[0]) throw new NotFoundException("دوره یافت نشد.");
-    return toCycle(rows[0]);
-  }
-
-  async list(farmId: string, cycleId: string): Promise<Sale[]> {
-    await this.cycleOrThrow(farmId, cycleId);
+  async list(farmId: string, flockId: string): Promise<Sale[]> {
+    await this.access.require(farmId, flockId);
     const rows = await this.db
       .select()
       .from(sales)
-      .where(and(eq(sales.cycleId, cycleId), eq(sales.farmId, farmId), isNull(sales.deletedAt)))
+      .where(and(eq(sales.flockId, flockId), isNull(sales.deletedAt)))
       .orderBy(asc(sales.date), asc(sales.createdAt));
     return rows.map(toSale);
   }
 
-  async create(farmId: string, userId: string, cycleId: string, dto: CreateSaleDto, tz = "Asia/Tehran") {
-    const cycle = await this.cycleOrThrow(farmId, cycleId);
+  async create(farmId: string, userId: string, flockId: string, dto: CreateSaleDto, tz = "Asia/Tehran") {
+    const flock = await this.access.require(farmId, flockId);
     const errors: Record<string, string> = {};
     if (dto.date > todayIso(tz)) errors.date = "ثبت تاریخ آینده مجاز نیست.";
-    if (dto.date < cycle.placement_date) errors.date = "تاریخ پیش از جوجه‌ریزی دوره است.";
+    if (dto.date < flock.start_date) errors.date = "تاریخ پیش از جوجه‌ریزی گله است.";
 
     const logs = await this.db
       .select()
       .from(dailyLogs)
-      .where(and(eq(dailyLogs.cycleId, cycleId), isNull(dailyLogs.deletedAt)));
+      .where(and(eq(dailyLogs.flockId, flockId), isNull(dailyLogs.deletedAt)));
     const existingSales = await this.db
       .select()
       .from(sales)
-      .where(and(eq(sales.cycleId, cycleId), isNull(sales.deletedAt)));
+      .where(and(eq(sales.flockId, flockId), isNull(sales.deletedAt)));
 
-    const lost = logs.reduce((s: number, l: any) => s + n(l.mortality) + n(l.culls), 0);
+    const lost = logs.reduce((s: number, l: any) => s + n(l.mortality) + n(l.cull), 0);
     const sold = existingSales.reduce((s: number, x: any) => s + n(x.count), 0);
-    const live = Math.max(0, cycle.initial_count - lost - sold);
-    if (dto.count > live) errors.count = `تعداد فروش بیشتر از قطعه زنده موجود (${live}) است.`;
+    const live = Math.max(0, flock.initial_count - lost - sold);
+    if (dto.count && dto.count > live) errors.count = `تعداد فروش بیشتر از قطعه زنده موجود (${live}) است.`;
+    // وزن کل نمی‌تواند از وزن تقریبی گله زنده بیشتر باشد (کنترل خطای ورود داده)
+    if (dto.count && dto.totalWeightKg > dto.count * 4.5) {
+      errors.totalWeightKg = "وزن کل با تعداد قطعه هم‌خوانی ندارد (بیش از ۴٫۵ کیلو برای هر قطعه).";
+    }
     assertValid(errors, "فروش ثبت نشد.");
 
     const id = randomUUID();
     await this.db.insert(sales).values({
       id,
-      farmId,
-      cycleId,
+      flockId,
       date: dto.date,
-      count: dto.count,
-      weightKg: String(dto.weightKg),
+      count: dto.count ?? null,
+      totalWeightKg: String(dto.totalWeightKg),
       pricePerKg: String(Math.round(dto.pricePerKg)),
       deductions: String(Math.round(dto.deductions ?? 0)),
       buyer: dto.buyer?.slice(0, 80) ?? null,
@@ -77,11 +74,12 @@ export class SalesService {
     return toSale(rows[0]);
   }
 
-  async remove(farmId: string, cycleId: string, id: string) {
+  async remove(farmId: string, flockId: string, id: string) {
+    await this.access.require(farmId, flockId);
     const rows = await this.db
       .select()
       .from(sales)
-      .where(and(eq(sales.id, id), eq(sales.cycleId, cycleId), eq(sales.farmId, farmId)))
+      .where(and(eq(sales.id, id), eq(sales.flockId, flockId)))
       .limit(1);
     if (!rows[0]) throw new NotFoundException("فروش یافت نشد.");
     await this.db.update(sales).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(sales.id, id));

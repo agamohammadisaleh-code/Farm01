@@ -9,7 +9,9 @@
  *     --email owner@farm.ir --password Secret1234
  *
  * اگر کاربر وجود نداشته باشد، ثبت‌نام انجام می‌شود و یک مزرعه جدید ساخته
- * می‌شود. سپس همه دوره‌ها، ثبت‌های روزانه، هزینه‌ها و فروش‌ها منتقل می‌شوند.
+ * می‌شود. سپس سالن‌ها (از نام سالن هر دوره)، گله‌ها، ثبت‌های روزانه،
+ * وزن‌گیری‌ها (از وزن‌های ثبت‌شده در لاگ روزانه)، هزینه‌ها و فروش‌ها منتقل
+ * می‌شوند.
  * عملیات idempotent است: شناسه هر دوره قدیمی در نقشه نگاشت ذخیره می‌شود و
  * اجرای دوباره رکورد تکراری نمی‌سازد (چون API برای هر روز upsert می‌کند و
  * دوره‌ها با نام + تاریخ جوجه‌ریزی تطبیق داده می‌شوند).
@@ -90,25 +92,52 @@ async function main() {
   };
 
   const legacyCycles = db.prepare("SELECT * FROM cycles ORDER BY id").all();
-  const existing = (await call("GET", "/cycles", null, token)).body;
+  const existing = (await call("GET", "/flocks", null, token)).body;
   let created = 0;
   let logs = 0;
+  let weights = 0;
   let costs = 0;
   let sales = 0;
 
+  // نوع دان هر خرید: نسخه قدیمی ستون نداشت ولی نام نوع در توضیح آمده است.
+  // هرچه تطبیق نخورد در استخر «دان (کل)» می‌نشیند.
+  const feedTypes = new Set(
+    db.prepare("SELECT DISTINCT feed_type FROM daily_logs WHERE feed_type IS NOT NULL").all().map((r) => r.feed_type),
+  );
+  const feedTypeOf = (description) => {
+    const text = String(description ?? "");
+    for (const type of feedTypes) if (text.includes(type)) return type;
+    return "دان (کل)";
+  };
+
+  // سالن‌ها: از ستون «سالن» هر دوره ساخته می‌شوند
+  const hallCache = new Map();
+  const ensureHall = async (house, capacity) => {
+    const name = (house ?? "").trim() || "سالن اصلی";
+    if (hallCache.has(name)) return hallCache.get(name);
+    const halls = (await call("GET", "/halls", null, token)).body;
+    let hall = halls.find((h) => h.name === name);
+    if (!hall) {
+      hall = (await call("POST", "/halls", { name, capacity: Math.max(0, Math.round(capacity || 0)) }, token)).body;
+    }
+    hallCache.set(name, hall);
+    return hall;
+  };
+
   for (const c of legacyCycles) {
     // تطبیق برای اجرای دوباره: نام + تاریخ جوجه‌ریزی
-    let cycle = existing.find((x) => x.name === c.name && x.placement_date === String(c.placement_date).slice(0, 10));
+    let cycle = existing.find((x) => x.name === c.name && x.start_date === String(c.placement_date).slice(0, 10));
+    const hall = await ensureHall(c.house, c.initial_count);
 
     if (!cycle) {
       const res = await call(
         "POST",
-        "/cycles",
+        "/flocks",
         {
+          hallId: hall.id,
           name: c.name,
-          house: c.house ?? "",
           breed: c.breed ?? "راس ۳۰۸",
-          placementDate: String(c.placement_date).slice(0, 10),
+          startDate: String(c.placement_date).slice(0, 10),
           initialCount: num(c.initial_count, 1000),
           // هزینه جوجه در دوره جدید خودکار ساخته می‌شود؛ برای جلوگیری از
           // دوباره‌شماری، قیمت جوجه صفر فرستاده می‌شود و رکورد هزینه قدیمی
@@ -125,28 +154,49 @@ async function main() {
     }
 
     if (c.status === "closed" && c.closed_date) {
-      await call("PATCH", `/cycles/${cycle.id}`, { status: "closed", closedDate: String(c.closed_date).slice(0, 10) }, token);
+      await call("PATCH", `/flocks/${cycle.id}`, { status: "closed", closedDate: String(c.closed_date).slice(0, 10) }, token);
     }
 
     const legacyLogs = db.prepare("SELECT * FROM daily_logs WHERE cycle_id = ? ORDER BY date").all(c.id);
+    const existingWeights = (await call("GET", `/flocks/${cycle.id}/weights`, null, token)).body;
+    const weightDates = new Set(existingWeights.map((w) => w.date));
+
     for (const l of legacyLogs) {
-      await attempt(`ثبت روزانه ${l.id} (${String(l.date).slice(0, 10)})`, () => call(
-        "POST",
-        `/cycles/${cycle.id}/logs`,
-        {
-          date: String(l.date).slice(0, 10),
-          mortality: num(l.mortality),
-          culls: num(l.culls),
-          feedKg: num(l.feed_kg),
-          waterL: num(l.water_l),
-          ...(l.temp_c != null ? { tempC: num(l.temp_c) } : {}),
-          ...(l.avg_weight_g != null ? { avgWeightG: num(l.avg_weight_g) } : {}),
-          feedType: l.feed_type ?? undefined,
-          notes: l.notes ?? undefined,
-        },
-        token,
-      ));
+      const date = String(l.date).slice(0, 10);
+      await attempt(`ثبت روزانه ${l.id} (${date})`, () =>
+        call(
+          "POST",
+          `/flocks/${cycle.id}/logs`,
+          {
+            date,
+            mortality: num(l.mortality),
+            cull: num(l.culls),
+            feedKg: num(l.feed_kg),
+            waterLiter: num(l.water_l),
+            ...(l.temp_c != null ? { avgTemp: num(l.temp_c) } : {}),
+            feedType: l.feed_type ?? undefined,
+            notes: l.notes ?? undefined,
+          },
+          token,
+        ),
+      );
       logs++;
+
+      // وزن ثبت‌شده در لاگ قدیمی، در مدل جدید یک «وزن‌گیری نمونه‌ای» است
+      if (l.avg_weight_g != null && l.avg_weight_g > 0 && !weightDates.has(date)) {
+        const okw = await attempt(`وزن‌گیری ${l.id} (${date})`, () =>
+          call(
+            "POST",
+            `/flocks/${cycle.id}/weights`,
+            { date, sampleCount: 100, avgWeightGr: Math.round(num(l.avg_weight_g)), notes: "منتقل‌شده از ثبت روزانه" },
+            token,
+          ),
+        );
+        if (okw) {
+          weights++;
+          weightDates.add(date);
+        }
+      }
     }
 
     // برای اجرای دوباره بی‌خطر، هزینه‌های موجود در مقصد خوانده و بر اساس
@@ -162,7 +212,7 @@ async function main() {
       return map;
     };
     const costSeen = countKeys(
-      (await call("GET", `/cycles/${cycle.id}/costs`, null, token)).body,
+      (await call("GET", `/flocks/${cycle.id}/expenses`, null, token)).body,
       (x) => `${x.date}|${x.category}|${x.amount}|${x.description}`,
     );
 
@@ -177,25 +227,29 @@ async function main() {
         continue;
       }
 
-      const ok = await attempt(`هزینه ${x.id} (${date})`, () => call(
-        "POST",
-        `/cycles/${cycle.id}/costs`,
-        {
-          date: String(x.date).slice(0, 10),
-          category: x.category,
-          description: (x.description ?? "هزینه").slice(0, 200),
-          amount: Math.max(1, Math.round(num(x.amount))),
-          ...(x.quantity != null ? { quantity: num(x.quantity) } : {}),
-          unit: x.unit ?? undefined,
-          vendor: x.vendor ?? undefined,
-        },
-        token,
-      ));
+      const ok = await attempt(`هزینه ${x.id} (${date})`, () =>
+        call(
+          "POST",
+          `/flocks/${cycle.id}/expenses`,
+          {
+            date,
+            category: x.category,
+            description,
+            amount,
+            ...(x.quantity != null ? { quantity: num(x.quantity) } : {}),
+            unit: x.unit ?? undefined,
+            vendor: x.vendor ?? undefined,
+            // خرید دان به انبار اضافه می‌شود
+            ...(x.category === "feed" ? { feedType: feedTypeOf(x.description) } : {}),
+          },
+          token,
+        ),
+      );
       if (ok) costs++;
     }
 
     const saleSeen = countKeys(
-      (await call("GET", `/cycles/${cycle.id}/sales`, null, token)).body,
+      (await call("GET", `/flocks/${cycle.id}/sales`, null, token)).body,
       (x) => `${x.date}|${x.count}|${x.weight_kg}|${x.price_per_kg}`,
     );
 
@@ -211,20 +265,22 @@ async function main() {
         continue;
       }
 
-      await attempt(`فروش ${s.id} (${saleDate})`, () => call(
-        "POST",
-        `/cycles/${cycle.id}/sales`,
-        {
-          date: String(s.date).slice(0, 10),
-          count: Math.max(1, Math.round(num(s.count))),
-          weightKg: Math.max(0.1, num(s.weight_kg)),
-          pricePerKg: Math.max(1, Math.round(num(s.price_per_kg))),
-          deductions: Math.round(num(s.deductions)),
-          buyer: s.buyer ?? undefined,
-          notes: s.notes ?? undefined,
-        },
-        token,
-      ));
+      await attempt(`فروش ${s.id} (${saleDate})`, () =>
+        call(
+          "POST",
+          `/flocks/${cycle.id}/sales`,
+          {
+            date: saleDate,
+            count: Math.max(1, Math.round(num(s.count))),
+            totalWeightKg: Math.max(0.1, num(s.weight_kg)),
+            pricePerKg: Math.max(1, Math.round(num(s.price_per_kg))),
+            deductions: Math.round(num(s.deductions)),
+            buyer: s.buyer ?? undefined,
+            notes: s.notes ?? undefined,
+          },
+          token,
+        ),
+      );
       sales++;
     }
   }
@@ -232,6 +288,7 @@ async function main() {
   console.log("انتقال کامل شد:");
   console.log(`  دوره‌های جدید: ${created} از ${legacyCycles.length}`);
   console.log(`  ثبت روزانه (upsert): ${logs}`);
+  console.log(`  وزن‌گیری: ${weights}`);
   console.log(`  هزینه: ${costs}`);
   console.log(`  فروش: ${sales}`);
   if (skipped.length) {

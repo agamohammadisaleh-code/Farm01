@@ -19,7 +19,40 @@ export class FarmsService {
   async get(farmId: string) {
     const rows = await this.db.select().from(farms).where(and(eq(farms.id, farmId), isNull(farms.deletedAt))).limit(1);
     if (!rows[0]) throw new NotFoundException("مزرعه یافت نشد.");
-    return { id: rows[0].id, name: rows[0].name, location: rows[0].location };
+    return {
+      id: rows[0].id,
+      name: rows[0].name,
+      location: rows[0].location,
+      owner_id: rows[0].ownerId,
+      created_at: rows[0].createdAt,
+    };
+  }
+
+  /**
+   * ساخت مزرعه دوم برای همان کاربر (مالک آن می‌شود).
+   * برای پشتیبانی از «چند مزرعه» بدون ایجاد حساب تازه.
+   */
+  async create(userId: string, dto: { name: string; location?: string }) {
+    const farmId = randomUUID();
+    await this.db.transaction(async (tx: any) => {
+      await tx.insert(farms).values({
+        id: farmId,
+        name: dto.name.trim().slice(0, 80),
+        location: dto.location?.slice(0, 120) ?? null,
+        ownerId: userId,
+      });
+      await tx.insert(farmMembers).values({ farmId, userId, role: "owner" });
+      await tx.insert(farmSettings).values({
+        farmId,
+        marketPrice: String(DEFAULT_SETTINGS.market_price),
+        feedPrice: String(DEFAULT_SETTINGS.feed_price),
+        targetWeightG: DEFAULT_SETTINGS.target_weight_g,
+        targetAgeDays: DEFAULT_SETTINGS.target_age_days,
+        defaultBreed: DEFAULT_SETTINGS.default_breed,
+        timezone: DEFAULT_SETTINGS.timezone,
+      });
+    });
+    return this.get(farmId);
   }
 
   async settings(farmId: string): Promise<FarmSettings> {
@@ -42,7 +75,10 @@ export class FarmsService {
   async updateSettings(farmId: string, dto: UpdateSettingsDto) {
     const current = await this.settings(farmId);
     if (dto.farmName) {
-      await this.db.update(farms).set({ name: dto.farmName.trim().slice(0, 80), updatedAt: new Date() }).where(eq(farms.id, farmId));
+      await this.db
+      .update(farms)
+      .set({ name: dto.farmName.trim().slice(0, 80), updatedAt: new Date() })
+      .where(eq(farms.id, farmId));
     }
     await this.db
       .update(farmSettings)
@@ -91,6 +127,10 @@ export class FarmsService {
         email,
         passwordHash: await bcrypt.hash(dto.password, 11),
         name: (dto.name ?? email.split("@")[0]).slice(0, 80),
+        phone: dto.phone?.slice(0, 20) ?? null,
+        // مزرعه اصلی و نقش اولیه همان مزرعه‌ای است که کاربر به آن اضافه می‌شود
+        role: dto.role,
+        farmId,
       });
     }
 

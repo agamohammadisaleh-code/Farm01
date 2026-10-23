@@ -15,4 +15,10 @@ export class AddMemberDto {
   @IsIn(["manager", "worker", "vet"], { message: "نقش معتبر نیست." }) role!: "manager" | "worker" | "vet";
   @IsOptional() @IsString() @MinLength(8) @MaxLength(72) password?: string;
   @IsOptional() @IsString() @MaxLength(80) name?: string;
+  @IsOptional() @IsString() @MaxLength(20) phone?: string;
+}
+
+export class CreateFarmDto {
+  @IsString() @MinLength(2, { message: "نام مزرعه را وارد کنید." }) @MaxLength(80) name!: string;
+  @IsOptional() @IsString() @MaxLength(120) location?: string;
 }
