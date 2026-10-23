@@ -81,6 +81,8 @@ function createDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_sales_cycle ON sales(cycle_id, date);
   `);
 
+  migrate(db);
+
   const initialized = db.prepare("SELECT value FROM settings WHERE key = 'initialized'").get() as
     | { value: string }
     | undefined;
@@ -89,6 +91,33 @@ function createDb(): Database.Database {
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('initialized', '1')").run();
   }
   return db;
+}
+
+const SCHEMA_VERSION = 2;
+
+/** مهاجرت‌های افزایشی و اصلاح یکپارچگی داده */
+function migrate(db: Database.Database) {
+  db.exec("CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+  const current = Number(
+    (db.prepare("SELECT value FROM schema_meta WHERE key = 'version'").get() as { value: string } | undefined)?.value ??
+      1,
+  );
+  if (current >= SCHEMA_VERSION) return;
+
+  const tx = db.transaction(() => {
+    if (current < 2) {
+      // حذف ثبت‌های تکراری یک روز (نگه‌داشتن آخرین رکورد) و سپس قید یکتایی
+      db.exec(`
+        DELETE FROM daily_logs
+        WHERE id NOT IN (
+          SELECT MAX(id) FROM daily_logs GROUP BY cycle_id, date
+        )
+      `);
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_unique ON daily_logs(cycle_id, date)");
+    }
+    db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)").run(String(SCHEMA_VERSION));
+  });
+  tx();
 }
 
 export function getDb(): Database.Database {

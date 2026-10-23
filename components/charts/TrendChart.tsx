@@ -118,7 +118,24 @@ export default function TrendChart({ series, format = "int", xTitle = "", height
       </div>
       <svg
         viewBox={`0 0 ${W} ${height}`}
+        role="img"
+        aria-label={`نمودار ${series.map((s) => s.name).join(" و ")}`}
         style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}
+        onTouchStart={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const px = ((e.touches[0].clientX - rect.left) / rect.width) * W;
+          const frac = Math.min(1, Math.max(0, (PAD.left + innerW - px) / innerW));
+          const i = Math.round(frac * (n - 1));
+          if (series[0]?.points[i]) setHover({ i, x: e.touches[0].clientX, y: e.touches[0].clientY - 24 });
+        }}
+        onTouchMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const px = ((e.touches[0].clientX - rect.left) / rect.width) * W;
+          const frac = Math.min(1, Math.max(0, (PAD.left + innerW - px) / innerW));
+          const i = Math.round(frac * (n - 1));
+          if (series[0]?.points[i]) setHover({ i, x: e.touches[0].clientX, y: e.touches[0].clientY - 24 });
+        }}
+        onTouchEnd={() => setHover(null)}
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();

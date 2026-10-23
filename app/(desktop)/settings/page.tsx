@@ -2,6 +2,7 @@ import { Settings2, Database, Cpu, Info, ShieldCheck, Wheat, ChartLine } from "l
 import { getSettings } from "@/lib/db";
 import SettingsForm from "@/components/forms/SettingsForm";
 import DataActions from "@/components/forms/DataActions";
+import InstallQr from "@/components/mobile/InstallQr";
 import { num } from "@/lib/format";
 import { standardAt } from "@/lib/standards";
 
@@ -26,6 +27,8 @@ export default async function SettingsPage() {
       <div className="grid grid-2-1" style={{ alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <SettingsForm settings={settings} />
+
+          <InstallQr />
 
           <div className="card">
             <div className="card-head">

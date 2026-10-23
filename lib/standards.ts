@@ -65,13 +65,15 @@ const WS = STANDARD_ANCHORS.map((a) => a.weightG);
 const CS = STANDARD_ANCHORS.map((a) => a.cumFeedG);
 
 function interpolate(day: number, key: "weightG" | "cumFeedG"): number {
-  const d = Math.max(1, Math.min(56, day));
+  const d = Math.max(1, Math.min(49, day));
   return pchip(XS, key === "weightG" ? WS : CS, d);
 }
 
+export const MAX_STANDARD_DAY = 49;
+
 export const STANDARDS: StdDay[] = (() => {
   const out: StdDay[] = [];
-  for (let day = 1; day <= 56; day++) {
+  for (let day = 1; day <= MAX_STANDARD_DAY; day++) {
     const w = interpolate(day, "weightG");
     const cum = interpolate(day, "cumFeedG");
     const prevCum = day === 1 ? 0 : interpolate(day - 1, "cumFeedG");
@@ -87,7 +89,7 @@ export const STANDARDS: StdDay[] = (() => {
 })();
 
 export function standardAt(day: number): StdDay {
-  const d = Math.max(1, Math.min(56, Math.round(day)));
+  const d = Math.max(1, Math.min(MAX_STANDARD_DAY, Math.round(day)));
   return STANDARDS[d - 1];
 }
 

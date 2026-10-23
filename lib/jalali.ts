@@ -116,9 +116,26 @@ export function jalaliToIso(jy: number, jm: number, jd: number): string {
   return `${g.gy}-${pad2(g.gm)}-${pad2(g.gd)}`;
 }
 
+/** منطقه زمانی مزرعه (پیش‌فرض: ایران) — مبنای «امروز» در کل سامانه */
+export const FARM_TIMEZONE = process.env.FARM_TIMEZONE || "Asia/Tehran";
+
+/** تاریخ امروز به میلادی ISO در منطقه زمانی مزرعه (نه ساعت سرور) */
 export function todayIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: FARM_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** ساعت محلی مزرعه به شکل ۱۴:۰۵ */
+export function nowTimeFa(): string {
+  return new Intl.DateTimeFormat("fa-IR", {
+    timeZone: FARM_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
 }
 
 export function isoDaysBetween(a: string, b: string): number {

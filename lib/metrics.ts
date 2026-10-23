@@ -162,6 +162,10 @@ const MORTALITY_ANCHORS = [
 
 export function expectedMortalityPct(age: number): number {
   const d = Math.max(1, age);
+  if (d <= MORTALITY_ANCHORS[0][0]) {
+    // زیر نخستین نقطه مرجع، درون‌یابی خطی از صفر تا مقدار روز سوم
+    return (MORTALITY_ANCHORS[0][1] * d) / MORTALITY_ANCHORS[0][0];
+  }
   for (let i = 0; i < MORTALITY_ANCHORS.length - 1; i++) {
     const [d1, v1] = MORTALITY_ANCHORS[i];
     const [d2, v2] = MORTALITY_ANCHORS[i + 1];

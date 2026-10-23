@@ -35,7 +35,7 @@ export default function DonutChart({
   return (
     <div className="row wrap" style={{ gap: 20, alignItems: "center" }}>
       <div style={{ position: "relative", width: size, height: size, flex: `0 0 ${size}px` }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`نمودار ترکیب: ${centerLabel}`} style={{ transform: "rotate(-90deg)" }}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f0eee6" strokeWidth={thickness} />
           {total > 0 &&
             slices.map((s) => {

@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { Bird, LayoutDashboard, SearchX } from "lucide-react";
+import { SearchX, LayoutDashboard, Smartphone } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="page-enter" style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh", padding: 20, background: "var(--bg)" }}>
       <div className="card" style={{ maxWidth: 460, textAlign: "center", padding: "40px 28px" }}>
         <div className="empty-icon" style={{ width: 60, height: 60 }}>
           <SearchX size={26} />
@@ -13,14 +13,14 @@ export default function NotFound() {
           ممکن است دوره مورد نظر حذف شده باشد یا نشانی را اشتباه وارد کرده باشید. از داشبورد می‌توانید همه دوره‌ها را
           ببینید.
         </p>
-        <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+        <div className="row wrap" style={{ gap: 8, justifyContent: "center" }}>
           <Link href="/" className="btn btn-primary">
             <LayoutDashboard size={15} />
             بازگشت به داشبورد
           </Link>
-          <Link href="/cycles" className="btn btn-outline">
-            <Bird size={15} />
-            دوره‌های پرورش
+          <Link href="/m" className="btn btn-outline">
+            <Smartphone size={15} />
+            نسخه موبایل
           </Link>
         </div>
       </div>

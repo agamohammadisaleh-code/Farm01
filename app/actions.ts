@@ -14,6 +14,15 @@ export interface ActionState {
   at?: number;
 }
 
+/** بازتازه‌سازی کش صفحات؛ بیرون از چرخه درخواست (مثلاً تست) بی‌اثر است */
+function refresh() {
+  try {
+    revalidatePath("/", "layout");
+  } catch {
+    /* بدون درخواست فعال — نادیده گرفته می‌شود */
+  }
+}
+
 const ok = (message: string): ActionState => ({ ok: true, message, at: Date.now() });
 const fail = (message: string, errors?: Record<string, string>): ActionState => ({
   ok: false,
@@ -75,7 +84,7 @@ export async function createCycleAction(_prev: ActionState | null, fd: FormData)
        VALUES (?, ?, 'chick', 'خرید جوجه یک‌روزه', ?, ?, 'قطعه', NULL)`,
     ).run(id, placement, Math.round(initial) * Math.round(chickPrice), Math.round(initial));
   }
-  revalidatePath("/", "layout");
+  refresh();
   redirect(`/cycles/${id}?created=1`);
 }
 
@@ -105,7 +114,7 @@ export async function updateCycleAction(_prev: ActionState | null, fd: FormData)
       `UPDATE cycles SET name=?, house=?, breed=?, placement_date=?, target_weight_g=?, target_age_days=?, notes=? WHERE id=?`,
     )
     .run(name, house, breed, placement, Math.round(targetWeight), Math.round(targetAge), notes || null, cycleId);
-  revalidatePath("/", "layout");
+  refresh();
   return ok("اطلاعات دوره به‌روزرسانی شد.");
 }
 
@@ -114,19 +123,19 @@ export async function archiveCycleAction(cycleId: number, closedDate: string) {
   const cycle = getCycle(cycleId);
   if (!cycle) return;
   db.prepare("UPDATE cycles SET status = 'closed', closed_date = ? WHERE id = ?").run(closedDate || todayIso(), cycleId);
-  revalidatePath("/", "layout");
+  refresh();
 }
 
 export async function reopenCycleAction(cycleId: number) {
   const db = getDb();
   db.prepare("UPDATE cycles SET status = 'active', closed_date = NULL WHERE id = ?").run(cycleId);
-  revalidatePath("/", "layout");
+  refresh();
 }
 
 export async function deleteCycleAction(cycleId: number) {
   const db = getDb();
   db.prepare("DELETE FROM cycles WHERE id = ?").run(cycleId);
-  revalidatePath("/", "layout");
+  refresh();
   redirect("/cycles");
 }
 
@@ -145,12 +154,15 @@ export async function saveDailyLogAction(_prev: ActionState | null, fd: FormData
   const temp = tempRaw ? numField(fd, "temp_c") : null;
   const weightRaw = str(fd, "avg_weight_g");
   const weight = weightRaw ? numField(fd, "avg_weight_g") : null;
-  const notes = str(fd, "notes");
-  const feedType = str(fd, "feed_type");
+  const notes = str(fd, "notes").slice(0, 500);
+  const feedType = str(fd, "feed_type").slice(0, 60);
 
   const errors: Record<string, string> = {};
   if (!isValidIso(date)) errors.date = "تاریخ معتبر نیست.";
   if (mortality < 0 || culls < 0) errors.mortality = "تلفات نمی‌تواند منفی باشد.";
+  if (mortality > 100000 || culls > 100000) errors.mortality = "عدد وارد‌شده غیرمنطقی است.";
+  if (feedKg > 500000) errors.feed_kg = "مقدار دان غیرمنطقی است.";
+  if (waterL > 2000000) errors.water_l = "مقدار آب غیرمنطقی است.";
   if (feedKg < 0) errors.feed_kg = "مقدار دان نمی‌تواند منفی باشد.";
   if (waterL < 0) errors.water_l = "مقدار آب نمی‌تواند منفی باشد.";
   if (temp !== null && (Number.isNaN(temp) || temp < -10 || temp > 50)) errors.temp_c = "دمای سالن باید بین ۱۰- تا ۵۰ درجه باشد.";
@@ -165,27 +177,30 @@ export async function saveDailyLogAction(_prev: ActionState | null, fd: FormData
   if (Object.keys(errors).length) return fail("ثبت انجام نشد؛ مقادیر را بررسی کنید.", errors);
 
   const db = getDb();
-  const existing = db.prepare("SELECT id FROM daily_logs WHERE cycle_id = ? AND date = ?").get(cycleId, date) as
-    | { id: number }
-    | undefined;
-  if (existing) {
-    db.prepare(
-      `UPDATE daily_logs SET mortality=?, culls=?, feed_kg=?, water_l=?, temp_c=?, avg_weight_g=?, feed_type=?, notes=? WHERE id=?`,
-    ).run(mortality, culls, feedKg, waterL, temp, weight, feedType || null, notes || null, existing.id);
-    revalidatePath("/", "layout");
-    return ok("آمار این روز به‌روزرسانی شد.");
-  }
+  const existed = Boolean(
+    db.prepare("SELECT 1 FROM daily_logs WHERE cycle_id = ? AND date = ?").get(cycleId, date),
+  );
+  // ثبت و ویرایش با یک دستور اتمیک (بدون شرط مسابقه)
   db.prepare(
     `INSERT INTO daily_logs (cycle_id, date, mortality, culls, feed_kg, water_l, temp_c, avg_weight_g, feed_type, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(cycle_id, date) DO UPDATE SET
+       mortality = excluded.mortality,
+       culls = excluded.culls,
+       feed_kg = excluded.feed_kg,
+       water_l = excluded.water_l,
+       temp_c = excluded.temp_c,
+       avg_weight_g = excluded.avg_weight_g,
+       feed_type = excluded.feed_type,
+       notes = excluded.notes`,
   ).run(cycleId, date, mortality, culls, feedKg, waterL, temp, weight, feedType || null, notes || null);
-  revalidatePath("/", "layout");
-  return ok("آمار روزانه با موفقیت ثبت شد.");
+  refresh();
+  return ok(existed ? "آمار این روز به‌روزرسانی شد." : "آمار روزانه با موفقیت ثبت شد.");
 }
 
 export async function deleteDailyLogAction(id: number) {
   getDb().prepare("DELETE FROM daily_logs WHERE id = ?").run(id);
-  revalidatePath("/", "layout");
+  refresh();
 }
 
 /* ---------------------------------- هزینه ---------------------------------- */
@@ -196,7 +211,7 @@ export async function saveCostAction(_prev: ActionState | null, fd: FormData): P
   if (!cycle) return fail("دوره یافت نشد.");
   const date = str(fd, "date");
   const category = str(fd, "category") || "other";
-  const description = str(fd, "description");
+  const description = str(fd, "description").slice(0, 160);
   const amount = numField(fd, "amount");
   const quantityRaw = str(fd, "quantity");
   const quantity = quantityRaw ? numField(fd, "quantity") : null;
@@ -207,8 +222,11 @@ export async function saveCostAction(_prev: ActionState | null, fd: FormData): P
   if (!isValidIso(date)) errors.date = "تاریخ معتبر نیست.";
   if (!description) errors.description = "شرح هزینه را وارد کنید.";
   if (!amount || amount <= 0) errors.amount = "مبلغ باید بزرگ‌تر از صفر باشد.";
+  if (amount > 1e13) errors.amount = "مبلغ وارد‌شده غیرمنطقی است.";
   if (date > todayIso()) errors.date = "ثبت تاریخ آینده مجاز نیست.";
+  if (date < cycle.placement_date) errors.date = "تاریخ هزینه نمی‌تواند پیش از جوجه‌ریزی باشد.";
   if (quantity !== null && (Number.isNaN(quantity) || quantity < 0)) errors.quantity = "مقدار معتبر نیست.";
+  if (quantity !== null && quantity > 1e7) errors.quantity = "مقدار وارد‌شده غیرمنطقی است.";
   if (Object.keys(errors).length) return fail("هزینه ثبت نشد.", errors);
 
   getDb()
@@ -217,13 +235,13 @@ export async function saveCostAction(_prev: ActionState | null, fd: FormData): P
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(cycleId, date, category, description, Math.round(amount), quantity, unit, vendor);
-  revalidatePath("/", "layout");
+  refresh();
   return ok("هزینه ثبت شد.");
 }
 
 export async function deleteCostAction(id: number) {
   getDb().prepare("DELETE FROM costs WHERE id = ?").run(id);
-  revalidatePath("/", "layout");
+  refresh();
 }
 
 /* ---------------------------------- فروش ---------------------------------- */
@@ -237,15 +255,19 @@ export async function saveSaleAction(_prev: ActionState | null, fd: FormData): P
   const weightKg = numField(fd, "weight_kg");
   const price = numField(fd, "price_per_kg");
   const deductions = numField(fd, "deductions") || 0;
-  const buyer = str(fd, "buyer") || null;
-  const notes = str(fd, "notes") || null;
+  const buyer = str(fd, "buyer").slice(0, 80) || null;
+  const notes = str(fd, "notes").slice(0, 300) || null;
 
   const errors: Record<string, string> = {};
   if (!isValidIso(date)) errors.date = "تاریخ معتبر نیست.";
   if (!count || count < 1) errors.count = "تعداد قطعه فروش را وارد کنید.";
   if (!weightKg || weightKg <= 0) errors.weight_kg = "وزن کل محموله (کیلوگرم) را وارد کنید.";
   if (!price || price <= 0) errors.price_per_kg = "قیمت هر کیلوگرم را وارد کنید.";
+  if (price > 1e8) errors.price_per_kg = "قیمت وارد‌شده غیرمنطقی است.";
+  if (deductions < 0) errors.deductions = "کسورات نمی‌تواند منفی باشد.";
+  if (weightKg > 2e6) errors.weight_kg = "وزن وارد‌شده غیرمنطقی است.";
   if (date > todayIso()) errors.date = "ثبت تاریخ آینده مجاز نیست.";
+  if (date < cycle.placement_date) errors.date = "تاریخ فروش نمی‌تواند پیش از جوجه‌ریزی باشد.";
   if (Object.keys(errors).length) return fail("فروش ثبت نشد.", errors);
 
   const db = getDb();
@@ -259,13 +281,13 @@ export async function saveSaleAction(_prev: ActionState | null, fd: FormData): P
     `INSERT INTO sales (cycle_id, date, count, weight_kg, price_per_kg, deductions, buyer, notes)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(cycleId, date, Math.round(count), weightKg, price, deductions, buyer, notes);
-  revalidatePath("/", "layout");
+  refresh();
   return ok("فروش ثبت شد.");
 }
 
 export async function deleteSaleAction(id: number) {
   getDb().prepare("DELETE FROM sales WHERE id = ?").run(id);
-  revalidatePath("/", "layout");
+  refresh();
 }
 
 /* ---------------------------------- تنظیمات ---------------------------------- */
@@ -294,18 +316,18 @@ export async function saveSettingsAction(_prev: ActionState | null, fd: FormData
     target_age_days: Math.round(targetAge),
     default_breed: defaultBreed || "راس ۳۰۸",
   });
-  revalidatePath("/", "layout");
+  refresh();
   return ok("تنظیمات ذخیره شد.");
 }
 
 export async function resetDemoAction() {
   resetDemoData();
-  revalidatePath("/", "layout");
+  refresh();
   redirect("/?reset=1");
 }
 
 export async function clearDataAction() {
   clearAllData();
-  revalidatePath("/", "layout");
+  refresh();
   redirect("/?cleared=1");
 }

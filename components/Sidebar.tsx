@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Bird, Sparkles, ChartPie, Settings, Wheat, Egg } from "lucide-react";
+import { LayoutDashboard, Bird, Sparkles, ChartPie, Settings, Wheat, Egg, Smartphone } from "lucide-react";
 import type { ReactNode } from "react";
 
 const NAV: { href: string; label: string; icon: ReactNode }[] = [
@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; icon: ReactNode }[] = [
   { href: "/assistant", label: "مشاور هوشمند", icon: <Sparkles size={17} /> },
   { href: "/reports", label: "گزارش‌ها", icon: <ChartPie size={17} /> },
   { href: "/settings", label: "تنظیمات", icon: <Settings size={17} /> },
+  { href: "/m", label: "اپ موبایل", icon: <Smartphone size={17} /> },
 ];
 
 export default function Sidebar({

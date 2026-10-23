@@ -5,7 +5,7 @@ import { AlertTriangle, RotateCcw, LayoutDashboard } from "lucide-react";
 
 export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <div style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+    <div style={{ display: "grid", placeItems: "center", minHeight: "100vh", padding: 20, background: "var(--bg)" }}>
       <div className="card" style={{ maxWidth: 460, textAlign: "center", padding: "40px 28px" }}>
         <div className="empty-icon" style={{ width: 60, height: 60, background: "var(--red-soft)", color: "var(--red)" }}>
           <AlertTriangle size={26} />
