@@ -1,0 +1,46 @@
+{
+  "name": "@farm/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "API مرغ‌یار — NestJS + PostgreSQL + JWT/RBAC",
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/test/*.spec.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "seed": "tsx src/db/seed.ts"
+  },
+  "dependencies": {
+    "@farm/domain": "*",
+    "@nestjs/common": "^11.2.8",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.2.8",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/platform-express": "^11.2.8",
+    "@nestjs/swagger": "^11.4.7",
+    "bcryptjs": "^3.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "drizzle-orm": "^0.45.4",
+    "helmet": "^8.3.0",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/testing": "^11.2.8",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.3",
+    "drizzle-kit": "^0.31.11",
+    "supertest": "^7.1.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

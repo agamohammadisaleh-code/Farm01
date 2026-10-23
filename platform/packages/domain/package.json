@@ -1,0 +1,17 @@
+{
+  "name": "@farm/domain",
+  "version": "0.1.0",
+  "description": "منطق دامنه مشترک وب، موبایل و API — مستقل از فریم‌ورک",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

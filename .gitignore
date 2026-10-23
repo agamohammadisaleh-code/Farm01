@@ -9,3 +9,10 @@ data/*.db-shm
 .DS_Store
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# پلتفرم
+platform/node_modules/
+platform/**/dist/
+platform/**/dist-test/
+platform/.pgdata/
+platform/.env

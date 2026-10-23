@@ -9,7 +9,7 @@
 | **داشبورد وب** | `/` | تحلیل، گزارش، تنظیمات، مدیریت کامل هزینه و فروش |
 | **اپلیکیشن موبایل (PWA)** | `/m` | ثبت سریع آمار در سالن، هشدارها، تصمیم‌گیری روی گوشی، کارکرد آفلاین |
 
-> 📱 راهنمای موبایل: [`docs/MOBILE.md`](docs/MOBILE.md) · 🔍 گزارش بازبینی مهندسی: [`docs/AUDIT.md`](docs/AUDIT.md)
+> 📱 راهنمای موبایل: [`docs/MOBILE.md`](docs/MOBILE.md) · 🔍 گزارش بازبینی مهندسی: [`docs/AUDIT.md`](docs/AUDIT.md) · 🏗️ پلتفرم جدید (NestJS + PostgreSQL + JWT/RBAC): [`platform/README.md`](platform/README.md)
 
 ---
 
