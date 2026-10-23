@@ -831,6 +831,134 @@ describe("Farm API (e2e)", () => {
     });
   });
 
+  describe("قواعد کسب‌وکار (بخش ۵)", () => {
+    it("FCR و قیمت تمام‌شده هر کیلو با فرمول‌های تعریف‌شده هم‌خوان‌اند", async () => {
+      const res = await request(server).get(`/api/v1/analytics/flocks/${flockId}`).set(auth(ownerToken)).expect(200);
+      const m = res.body;
+      const produced = m.liveBiomassKg + m.soldWeightKg;
+
+      expect(Math.abs(m.fcr - m.totalFeedKg / produced) < 1e-6).toBe(true);
+
+      if (m.costPerKgLive) {
+        expect(Math.abs(m.costPerKgLive * produced - m.totalCost) < 1).toBe(true);
+      }
+      // نرخ تلفات از تلفات تجمعی محاسبه می‌شود، نه از کل خارج‌شده‌ها
+      expect(Number(m.mortalityPct.toFixed(4))).toBe(Number(((m.mortalityTotal / m.flock.initial_count) * 100).toFixed(4)));
+      // خارج‌شده کل = تلفات + حذف؛ هرگز کمتر از تلفات نیست
+      expect(m.removalPct).toBeGreaterThanOrEqual(m.mortalityPct);
+      expect(Number(m.removalPct.toFixed(4))).toBe(
+        Number((((m.mortalityTotal + m.cullsTotal) / m.flock.initial_count) * 100).toFixed(4)),
+      );
+    });
+
+    it("افت بیش از ۱۰٪ مصرف آب، هشدار خودکار و یادآور می‌سازد", async () => {
+      const flock = await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(ownerToken))
+        .send({ hallId, name: "گله پایش آب", startDate: startDate, initialCount: 1000 })
+        .expect(201);
+      const id = flock.body.id;
+
+      // پنج روز با مصرف آب ثابت، روز آخر با افت ۱۵٪
+      for (let i = 5; i >= 1; i--) {
+        const day = new Date(`${startDate}T00:00:00Z`);
+        day.setUTCDate(day.getUTCDate() + (5 - i));
+        await request(server)
+          .post(`/api/v1/flocks/${id}/logs`)
+          .set(auth(ownerToken))
+          .send({
+            date: day.toISOString().slice(0, 10),
+            mortality: 1,
+            feedKg: 100,
+            waterLiter: i === 1 ? 170 : 200,
+            feedType: "دان آغازین",
+          })
+          .expect(201);
+      }
+
+      const metrics = await request(server).get(`/api/v1/analytics/flocks/${id}`).set(auth(ownerToken)).expect(200);
+      expect(metrics.body.waterChangePct).toBeLessThan(-10);
+      expect(metrics.body.alerts.some((a: any) => a.id === "water-drop")).toBe(true);
+
+      const reminders = await request(server).get("/api/v1/reminders?horizonDays=3").set(auth(ownerToken)).expect(200);
+      expect(reminders.body.reminders.some((r: any) => r.kind === "alert" && r.title.includes("افت مصرف آب"))).toBe(true);
+    });
+
+    it("آستانه افت آب از تنظیمات مزرعه خوانده می‌شود", async () => {
+      const flock = await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(ownerToken))
+        .send({ hallId, name: "گله آستانه آب", startDate: startDate, initialCount: 1000 })
+        .expect(201);
+      const id = flock.body.id;
+
+      for (let i = 3; i >= 1; i--) {
+        const day = new Date(`${startDate}T00:00:00Z`);
+        day.setUTCDate(day.getUTCDate() + (3 - i));
+        await request(server)
+          .post(`/api/v1/flocks/${id}/logs`)
+          .set(auth(ownerToken))
+          .send({
+            date: day.toISOString().slice(0, 10),
+            mortality: 1,
+            feedKg: 100,
+            waterLiter: i === 1 ? 170 : 200,
+            feedType: "دان آغازین",
+          })
+          .expect(201);
+      }
+
+      // آستانه را به ۲۰٪ بالا می‌بریم؛ افت ۱۵٪ دیگر هشدار نیست
+      await request(server).patch("/api/v1/farm/settings").set(auth(ownerToken)).send({ waterDropAlertPct: 20 }).expect(200);
+      const relaxed = await request(server).get(`/api/v1/analytics/flocks/${id}`).set(auth(ownerToken)).expect(200);
+      expect(relaxed.body.alerts.some((a: any) => a.id === "water-drop")).toBe(false);
+
+      await request(server).patch("/api/v1/farm/settings").set(auth(ownerToken)).send({ waterDropAlertPct: 10 }).expect(200);
+    });
+
+    it("آستانه تلفات روزانه در تنظیمات ذخیره می‌شود و اعتبارسنجی دارد", async () => {
+      const ok = await request(server)
+        .patch("/api/v1/farm/settings")
+        .set(auth(ownerToken))
+        .send({ dailyMortalityAlertPct: 0.75 })
+        .expect(200);
+      expect(ok.body.daily_mortality_alert_pct).toBe(0.75);
+
+      await request(server)
+        .patch("/api/v1/farm/settings")
+        .set(auth(ownerToken))
+        .send({ dailyMortalityAlertPct: 50 })
+        .expect(400);
+
+      await request(server).patch("/api/v1/farm/settings").set(auth(ownerToken)).send({ dailyMortalityAlertPct: 0.5 }).expect(200);
+    });
+
+    it("تلفات روزانه بالای آستانه، هشدار می‌سازد", async () => {
+      const flock = await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(ownerToken))
+        .send({ hallId, name: "گله تلفات روزانه", startDate: startDate, initialCount: 1000 })
+        .expect(201);
+      const id = flock.body.id;
+
+      await request(server)
+        .post(`/api/v1/flocks/${id}/logs`)
+        .set(auth(ownerToken))
+        .send({ date: yesterday, mortality: 1, feedKg: 90, waterLiter: 180, feedType: "دان آغازین" })
+        .expect(201);
+      // ۱۲ تلفات از ۱٬۰۰۰ = ۱٫۲٪ → بالای آستانه ۰٫۵٪
+      await request(server)
+        .post(`/api/v1/flocks/${id}/logs`)
+        .set(auth(ownerToken))
+        .send({ date: today, mortality: 12, feedKg: 90, waterLiter: 180, feedType: "دان آغازین" })
+        .expect(201);
+
+      const metrics = await request(server).get(`/api/v1/analytics/flocks/${id}`).set(auth(ownerToken)).expect(200);
+      expect(metrics.body.dailyMortalityPct).toBeGreaterThan(0.5);
+      expect(metrics.body.alerts.some((a: any) => a.id === "mortality-daily")).toBe(true);
+    });
+  });
+
   describe("مدیریت کاربران", () => {
     it("کاربر نام خود را ویرایش می‌کند", async () => {
       const res = await request(server).patch("/api/v1/auth/me").set(auth(ownerToken)).send({ name: "مالک جدید" }).expect(200);

@@ -171,6 +171,8 @@ export function toSettings(r: any): FarmSettings {
     target_age_days: n(r.targetAgeDays),
     default_breed: r.defaultBreed,
     feed_alert_days: r.feedAlertDays == null ? 3 : n(r.feedAlertDays),
+    daily_mortality_alert_pct: r.dailyMortalityAlertPct == null ? 0.5 : n(r.dailyMortalityAlertPct),
+    water_drop_alert_pct: r.waterDropAlertPct == null ? 10 : n(r.waterDropAlertPct),
     timezone: r.timezone,
     updated_at: isoDateTime(r.updatedAt),
   };

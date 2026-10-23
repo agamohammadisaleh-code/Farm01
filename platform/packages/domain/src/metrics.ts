@@ -77,7 +77,20 @@ export interface CycleMetrics {
   lostBirds: number;
   mortalityTotal: number;
   cullsTotal: number;
+  /** نرخ تلفات = تلفات تجمعی ÷ تعداد اولیه × ۱۰۰ (بدون حذف) */
   mortalityPct: number;
+  /** درصد حذف = حذف تجمعی ÷ تعداد اولیه × ۱۰۰ */
+  cullPct: number;
+  /** درصد کل خارج‌شده‌ها = (تلفات + حذف) ÷ تعداد اولیه × ۱۰۰ */
+  removalPct: number;
+  /** نرخ تلفات آخرین روز ثبت‌شده (٪) */
+  dailyMortalityPct: number;
+  /** تغییر مصرف آب آخرین روز نسبت به میانگین سه روز قبل (٪) */
+  waterChangePct: number;
+  /** میانگین مصرف آب سه روز قبل از آخرین ثبت (لیتر) */
+  waterBaselineL: number;
+  /** مصرف آب آخرین روز (لیتر) */
+  lastWaterL: number;
   expectedMortalityPct: number;
   totalFeedKg: number;
   totalWaterL: number;
@@ -184,7 +197,15 @@ export function computeMetrics(
   logs: DailyLog[],
   expenses: Expense[],
   sales: Sale[],
-  opts: { today?: string; marketPrice: number; feedPrice: number },
+  opts: {
+    today?: string;
+    marketPrice: number;
+    feedPrice: number;
+    /** آستانه هشدار تلفات روزانه (٪ از پرندگان زنده) — پیش‌فرض ۰٫۵ */
+    dailyMortalityAlertPct?: number;
+    /** آستانه هشدار افت مصرف آب (٪ نسبت به میانگین سه روز قبل) — پیش‌فرض ۱۰ */
+    waterDropAlertPct?: number;
+  },
   weights: WeightSample[] = [],
 ): CycleMetrics {
   const today = opts.today ?? todayIso();
@@ -197,7 +218,17 @@ export function computeMetrics(
   const lostBirds = mortalityTotal + cullsTotal;
   const soldBirds = sales.reduce((s, x) => s + (x.count || 0), 0);
   const liveBirds = Math.max(0, flock.initial_count - lostBirds - soldBirds);
-  const mortalityPct = flock.initial_count ? (lostBirds / flock.initial_count) * 100 : 0;
+
+  /**
+   * قاعده ۲ (نرخ تلفات): نرخ تلفات = (تلفات تجمعی ÷ تعداد اولیه) × ۱۰۰.
+   * حذف (cull) در این عدد نمی‌آید — دلیل: استاندارد نژاد هم فقط تلفات را
+   * می‌سنجد و مخلوط‌کردن آن‌ها مقایسه با استاندارد را بی‌معنا می‌کند.
+   * برای پایش کل پرندگان خارج‌شده، `removalPct` (تلفات + حذف) هم برگردانده
+   * می‌شود.
+   */
+  const mortalityPct = flock.initial_count ? (mortalityTotal / flock.initial_count) * 100 : 0;
+  const cullPct = flock.initial_count ? (cullsTotal / flock.initial_count) * 100 : 0;
+  const removalPct = flock.initial_count ? (lostBirds / flock.initial_count) * 100 : 0;
   const expectedMortPct = expectedMortalityPct(ageDays);
 
   const totalFeedKg = logs.reduce((s, l) => s + (l.feed_kg || 0), 0);
@@ -206,6 +237,26 @@ export function computeMetrics(
     .filter((c) => c.category === "feed" && c.date <= today)
     .reduce((s, c) => s + (c.quantity || 0), 0);
   const feedStockKg = Math.max(0, purchasedFeedKg - totalFeedKg);
+
+  /**
+   * قاعده ۵: نرخ تلفات روزانه نسبت به پرندگانی که ابتدای آن روز زنده بودند.
+   * پرندگان ابتدای روز = پرندگان زنده فعلی + تلفات و حذف همان روز.
+   */
+  const lastLog = logs.at(-1) ?? null;
+  const birdsAtStartOfLastDay = lastLog ? liveBirds + (lastLog.mortality || 0) + (lastLog.cull || 0) : 0;
+  const dailyMortalityPct =
+    lastLog && birdsAtStartOfLastDay > 0 ? ((lastLog.mortality || 0) / birdsAtStartOfLastDay) * 100 : 0;
+
+  /**
+   * قاعده ۴: افت مصرف آب نسبت به میانگین سه روز قبل از آخرین ثبت.
+   * اگر سه روز قبل داده نداشته باشیم (ابتدای دوره) هشدار داده نمی‌شود.
+   */
+  const waterBaselineDays = logs.slice(-4, -1);
+  const waterBaselineL = waterBaselineDays.length
+    ? waterBaselineDays.reduce((s, l) => s + (l.water_liter || 0), 0) / waterBaselineDays.length
+    : 0;
+  const lastWaterL = lastLog?.water_liter ?? 0;
+  const waterChangePct = waterBaselineL > 0 ? ((lastWaterL - waterBaselineL) / waterBaselineL) * 100 : 0;
 
   const last7 = logs.slice(-7);
   const last7FeedKg = last7.reduce((s, l) => s + (l.feed_kg || 0), 0);
@@ -270,6 +321,14 @@ export function computeMetrics(
   const liveBiomassKg = (liveBirds * currentWeightG) / 1000;
   const soldWeightKg = sales.reduce((s, x) => s + (x.total_weight_kg || 0), 0);
   const producedKg = liveBiomassKg + soldWeightKg;
+
+  /**
+   * قاعده ۱ (ضریب تبدیل): FCR = مجموع دان مصرفی (کیلوگرم) ÷ مجموع وزن زنده
+   * تولیدشده (کیلوگرم).
+   * «وزن زنده تولیدشده» = وزن زنده فعلی گله + وزنی که تا امروز فروخته شده؛
+   * اگر فقط وزن زنده فعلی در مخرج باشد، فروش‌های میان‌دوره‌ای FCR را مصنوعاً
+   * بدتر نشان می‌دهند.
+   */
   const fcr = totalFeedKg > 0 && producedKg > 0.001 ? totalFeedKg / producedKg : null;
   // استاندارد گله: ضریب تبدیل نژاد با احتساب تلفات (خوراک پرندگان تلف‌شده)
   const stdFcr = standardAt(ageDays).fcr * (1 + mortalityPct / 100);
@@ -305,6 +364,14 @@ export function computeMetrics(
   const estimatedLiveValue = liveBiomassKg * marketPrice;
 
   const costPerBird = flock.initial_count ? totalCost / flock.initial_count : 0;
+  /**
+   * قاعده ۳ (قیمت تمام‌شده): مجموع هزینه‌های دوره ÷ وزن نهایی.
+   * وزن نهایی همان مخرج FCR است (وزن زنده تولیدشده) تا این دو شاخص هم‌پایه
+   * باشند و «هزینه × وزن» با «هزینه کل» بخواند.
+   * نکته: `totalCost` هزینه «مصرف» است (دان خریداری‌شده منهای موجودی انبار)،
+   * نه مبلغ پرداختی؛ وگرنه خرید بزرگ پایان دوره قیمت هر کیلو را مصنوعاً بالا
+   * می‌برد.
+   */
   const costPerKgLive = producedKg > 0.01 ? totalCost / producedKg : null;
 
   const realizedRevenue = revenue;
@@ -398,6 +465,13 @@ export function computeMetrics(
     targetAge,
     tempC: logs.at(-1)?.avg_temp ?? null,
     recentMortalityAvg: last7.length ? last7.reduce((s, l) => s + l.mortality, 0) / last7.length : 0,
+    dailyMortalityPct,
+    dailyMortalityAlertPct: opts.dailyMortalityAlertPct ?? 0.5,
+    waterChangePct,
+    waterBaselineL,
+    waterDropAlertPct: opts.waterDropAlertPct ?? 10,
+    lastWaterL,
+    lastLogDate: lastLog?.date?.slice(0, 10) ?? null,
   });
 
   return {
@@ -410,6 +484,12 @@ export function computeMetrics(
     mortalityTotal,
     cullsTotal,
     mortalityPct,
+    cullPct,
+    removalPct,
+    dailyMortalityPct,
+    waterChangePct,
+    waterBaselineL,
+    lastWaterL,
     expectedMortalityPct: expectedMortPct,
     totalFeedKg,
     totalWaterL,
@@ -499,6 +579,13 @@ function buildAlerts(x: {
   targetAge: number;
   tempC: number | null;
   recentMortalityAvg: number;
+  dailyMortalityPct: number;
+  dailyMortalityAlertPct: number;
+  waterChangePct: number;
+  waterBaselineL: number;
+  waterDropAlertPct: number;
+  lastWaterL: number;
+  lastLogDate: string | null;
 }): Insight[] {
   const out: Insight[] = [];
   const last = x.logs.at(-1);
@@ -524,6 +611,45 @@ function buildAlerts(x: {
       recommendation:
         "علائم بالینی را بررسی کنید: وضعیت تنفس، مدفوع، دمای سالن و کیفیت آب. در صورت ادامه، با دامپزشک تماس بگیرید و کالبدشکافی نمونه انجام دهید.",
       action: { label: "ثبت گزارش دامپزشکی", href: `/flocks/${x.flock.id}?tab=daily` },
+    });
+  }
+
+  /**
+   * قاعده ۵: هشدار خودکار وقتی نرخ تلفات روزانه از آستانه بگذرد.
+   * آستانه پیش‌فرض ۰٫۵٪ از پرندگان زنده است و در تنظیمات مزرعه قابل تغییر.
+   */
+  if (last && x.dailyMortalityAlertPct > 0 && x.dailyMortalityPct > x.dailyMortalityAlertPct) {
+    const severity = x.dailyMortalityPct >= x.dailyMortalityAlertPct * 2 ? "critical" : "warning";
+    out.push({
+      id: "mortality-daily",
+      severity,
+      title: "نرخ تلفات امروز از آستانه گذشت",
+      detail: `تلفات روز ${faDigits(x.lastLogDate ? x.lastLogDate : "")} برابر ${faDigits(last.mortality)} قطعه و نرخ روزانه ${faDigits(
+        x.dailyMortalityPct.toFixed(2),
+      )}٪ است؛ آستانه هشدار ${faDigits(x.dailyMortalityAlertPct.toFixed(2))}٪.`,
+      recommendation:
+        "تلفات را به تفکیک سالن ثبت کنید، آب و دان را از نظر آلودگی بررسی کنید و در صورت ادامه بیش از دو روز، با دامپزشک تماس بگیرید.",
+      action: { label: "ثبت آمار امروز", href: `/flocks/${x.flock.id}?tab=daily` },
+    });
+  }
+
+  /**
+   * قاعده ۴: هشدار خودکار وقتی مصرف آب بیش از آستانه (پیش‌فرض ۱۰٪) نسبت به
+   * میانگین سه روز قبل افت کند. افت آب پیش از افت دان رخ می‌دهد و از
+   * زودهنگام‌ترین نشانه‌های بیماری است.
+   */
+  if (last && x.waterBaselineL > 0 && x.waterChangePct <= -x.waterDropAlertPct) {
+    const dropPct = Math.abs(x.waterChangePct);
+    out.push({
+      id: "water-drop",
+      severity: dropPct >= x.waterDropAlertPct * 2 ? "critical" : "warning",
+      title: "افت مصرف آب نسبت به سه روز گذشته",
+      detail: `مصرف آب آخرین روز ${faDigits(Math.round(x.lastWaterL))} لیتر و میانگین سه روز قبل ${faDigits(
+        Math.round(x.waterBaselineL),
+      )} لیتر است؛ کاهش ${faDigits(dropPct.toFixed(1))}٪ (آستانه ${faDigits(x.waterDropAlertPct)}٪).`,
+      recommendation:
+        "گرفتگی یا نشتی خط آب، فشار و ارتفاع آبخوری، دمای سالن و شروع بیماری را بررسی کنید. افت مصرف آب معمولاً پیش از افت دان دیده می‌شود.",
+      action: { label: "بررسی ثبت امروز", href: `/flocks/${x.flock.id}?tab=daily` },
     });
   }
 

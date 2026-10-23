@@ -13,8 +13,17 @@ import {
 import { todayIso } from "../common/ids";
 import { n } from "../common/parse";
 import { HealthService } from "../health/health.service";
+import { AnalyticsService } from "../analytics/analytics.service";
 
-export type ReminderKind = "vaccination" | "medication" | "withdrawal" | "stock" | "log" | "milestone";
+export type ReminderKind =
+  | "vaccination"
+  | "medication"
+  | "withdrawal"
+  | "stock"
+  | "log"
+  | "milestone"
+  /** هشدارهای محاسبه‌شده از قواعد کسب‌وکار (افت آب، تلفات روزانه، FCR، دما) */
+  | "alert";
 export type ReminderSeverity = "critical" | "warning" | "info";
 
 export interface Reminder {
@@ -51,6 +60,7 @@ export class RemindersService {
   constructor(
     @Inject(DATABASE) private readonly database: Database,
     private readonly health: HealthService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   private get db(): any {
@@ -164,6 +174,30 @@ export class RemindersService {
             });
           }
         }
+      }
+
+      /* --------------------------- هشدارهای قواعد --------------------------- */
+      /**
+       * قواعد ۴ و ۵ (افت مصرف آب و نرخ تلفات روزانه) و بقیه هشدارهای موتور
+       * شاخص‌ها، از همین‌جا در فهرست یادآورها دیده می‌شوند تا کاربر یک فهرست
+       * واحد «امروز چه کاری لازم است» داشته باشد، نه دو جای جدا.
+       */
+      const metrics = await this.analytics.flockMetrics(farmId, flock.id);
+      for (const alert of metrics.alerts) {
+        if (alert.severity !== "critical" && alert.severity !== "warning") continue;
+        reminders.push({
+          id: `alert-${alert.id}-${flock.id}`,
+          kind: "alert",
+          severity: alert.severity,
+          title: `${alert.title} — ${flockName}`,
+          detail: alert.detail,
+          due: today,
+          daysLeft: 0,
+          flockId: flock.id,
+          flockName,
+          href: alert.action?.href ?? `/flocks/${flock.id}?tab=daily`,
+          action: null,
+        });
       }
 
       /* ------------------------------ ثبت روزانه ------------------------------ */

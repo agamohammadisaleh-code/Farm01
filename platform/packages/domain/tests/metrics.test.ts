@@ -350,3 +350,131 @@ test("متریک گله یکنواختی آخرین نمونه را برمی‌�
   assert.equal(m.uniformitySeries.length, 2);
   assert.equal(m.avgUniformityPct != null, true);
 });
+
+/* ============================ قواعد کسب‌وکار (بخش ۵) ============================ */
+
+test("قاعده ۱: FCR = مجموع دان مصرفی ÷ مجموع وزن زنده تولیدشده", () => {
+  const weights = samples([{ day: 20, weight: 1000 }]);
+  const sale: Sale[] = [
+    {
+      id: "s1", flock_id: "f1", date: addDaysIso(start, 25),
+      total_weight_kg: 1500, price_per_kg: 98000, buyer: "کشتارگاه",
+      count: 1000, deductions: 0, notes: null,
+      created_by: null, created_at: "", updated_at: "", deleted_at: null,
+    },
+  ];
+  const m = computeMetrics(flock(), logs(30, { feed: 1000 }), [], sale, { today, marketPrice: 98000, feedPrice: 33500 }, weights);
+
+  // مخرج باید وزن زنده فعلی + وزن فروخته‌شده باشد، نه فقط وزن زنده فعلی
+  const produced = m.liveBiomassKg + m.soldWeightKg;
+  assert.equal(m.soldWeightKg, 1500);
+  assert.ok(Math.abs(m.fcr! - m.totalFeedKg / produced) < 1e-9, "FCR باید دقیقاً دان ÷ وزن تولیدی باشد");
+});
+
+test("قاعده ۱: بدون وزن و فروش، FCR تعریف‌نشده است (نه صفر)", () => {
+  const m = computeMetrics(flock(), [], [], [], { today, marketPrice: 98000, feedPrice: 33500 });
+  assert.equal(m.fcr, null);
+});
+
+test("قاعده ۲: نرخ تلفات = تلفات تجمعی ÷ تعداد اولیه × ۱۰۰ (بدون حذف)", () => {
+  const list = logs(10, { mortality: 5 }).map((l, i) => (i < 2 ? { ...l, cull: 50 } : l));
+  const m = computeMetrics(flock({ initial_count: 10000 }), list, [], [], { today, marketPrice: 98000, feedPrice: 33500 });
+
+  assert.equal(m.mortalityTotal, 50);
+  assert.equal(m.cullsTotal, 100);
+  assert.ok(Math.abs(m.mortalityPct - (50 / 10000) * 100) < 1e-9, "تلفات ۵۰ از ۱۰٬۰۰۰ = ۰٫۵٪");
+  assert.ok(Math.abs(m.cullPct - 1) < 1e-9, "حذف ۱۰۰ از ۱۰٬۰۰۰ = ۱٪");
+  assert.ok(Math.abs(m.removalPct - 1.5) < 1e-9, "خارج‌شده کل = ۱٫۵٪");
+  // پرنده زنده باید حذف را هم کم کند
+  assert.equal(m.liveBirds, 10000 - 150);
+});
+
+test("قاعده ۳: قیمت تمام‌شده هر کیلو = مجموع هزینه‌ها ÷ وزن نهایی", () => {
+  const weights = samples([{ day: 29, weight: 2000 }]);
+  const costs = expenses([
+    { category: "chick", amount: 100_000_000, date: start },
+    { category: "labor", amount: 20_000_000, date: addDaysIso(start, 5) },
+  ]);
+  const m = computeMetrics(flock(), logs(30), costs, [], { today, marketPrice: 98000, feedPrice: 33500 }, weights);
+
+  const produced = m.liveBiomassKg + m.soldWeightKg;
+  assert.ok(Math.abs(m.costPerKgLive! - m.totalCost / produced) < 1e-9);
+  // برابری مستقل: هزینه کل ÷ وزن تولیدی
+  assert.ok(Math.abs(m.costPerKgLive! * produced - m.totalCost) < 1e-6);
+});
+
+test("قاعده ۴: افت بیش از ۱۰٪ مصرف آب نسبت به میانگین سه روز قبل هشدار می‌دهد", () => {
+  const base = logs(10, { water: 2000 });
+  const dropped = base.map((l, i) => (i === base.length - 1 ? { ...l, water_liter: 1750 } : l)); // −۱۲٫۵٪
+  const m = computeMetrics(flock(), dropped, [], [], { today, marketPrice: 98000, feedPrice: 33500 });
+
+  assert.equal(m.waterBaselineL, 2000);
+  assert.equal(m.lastWaterL, 1750);
+  assert.ok(m.waterChangePct < -10);
+  const alert = m.alerts.find((a) => a.id === "water-drop");
+  assert.ok(alert, "هشدار افت آب باید صادر شود");
+  assert.equal(alert!.severity, "warning");
+});
+
+test("قاعده ۴: افت کمتر از آستانه هشدار نمی‌دهد", () => {
+  const base = logs(10, { water: 2000 });
+  const slight = base.map((l, i) => (i === base.length - 1 ? { ...l, water_liter: 1850 } : l)); // −۷٫۵٪
+  const m = computeMetrics(flock(), slight, [], [], { today, marketPrice: 98000, feedPrice: 33500 });
+  assert.equal(m.alerts.find((a) => a.id === "water-drop"), undefined);
+});
+
+test("قاعده ۴: آستانه افت آب از تنظیمات مزرعه خوانده می‌شود", () => {
+  const base = logs(10, { water: 2000 });
+  const dropped = base.map((l, i) => (i === base.length - 1 ? { ...l, water_liter: 1750 } : l));
+  const m = computeMetrics(flock(), dropped, [], [], {
+    today, marketPrice: 98000, feedPrice: 33500, waterDropAlertPct: 20,
+  });
+  assert.equal(m.alerts.find((a) => a.id === "water-drop"), undefined, "با آستانه ۲۰٪ افت ۱۲٫۵٪ هشدار نیست");
+});
+
+test("قاعده ۵: نرخ تلفات روزانه بالای ۰٫۵٪ هشدار می‌دهد", () => {
+  // ۱۰٬۰۰۰ قطعه، ۸۰ تلفات در روز آخر → ۰٫۸٪ نرخ روزانه
+  const list = logs(10, { mortality: 2 });
+  list[list.length - 1] = { ...list[list.length - 1], mortality: 80 };
+  const m = computeMetrics(flock({ initial_count: 10000 }), list, [], [], { today, marketPrice: 98000, feedPrice: 33500 });
+
+  assert.ok(m.dailyMortalityPct > 0.5, `نرخ روزانه ${m.dailyMortalityPct}`);
+  const alert = m.alerts.find((a) => a.id === "mortality-daily");
+  assert.ok(alert, "هشدار تلفات روزانه باید صادر شود");
+});
+
+test("قاعده ۵: تلفات روزانه زیر آستانه بدون هشدار است", () => {
+  const list = logs(10, { mortality: 2 }); // ۲ از ۱۰٬۰۰۰ = ۰٫۰۲٪
+  const m = computeMetrics(flock({ initial_count: 10000 }), list, [], [], { today, marketPrice: 98000, feedPrice: 33500 });
+  assert.equal(m.alerts.find((a) => a.id === "mortality-daily"), undefined);
+});
+
+test("قاعده ۵: آستانه تلفات روزانه قابل تنظیم است", () => {
+  const list = logs(10, { mortality: 2 });
+  list[list.length - 1] = { ...list[list.length - 1], mortality: 80 }; // ۰٫۸٪
+  const strict = computeMetrics(flock({ initial_count: 10000 }), list, [], [], {
+    today, marketPrice: 98000, feedPrice: 33500, dailyMortalityAlertPct: 0.2,
+  });
+  assert.ok(strict.alerts.find((a) => a.id === "mortality-daily"));
+
+  const lenient = computeMetrics(flock({ initial_count: 10000 }), list, [], [], {
+    today, marketPrice: 98000, feedPrice: 33500, dailyMortalityAlertPct: 5,
+  });
+  assert.equal(lenient.alerts.find((a) => a.id === "mortality-daily"), undefined);
+});
+
+test("نرخ تلفات روزانه نسبت به پرندگان زنده همان روز محاسبه می‌شود", () => {
+  // ۱۰٬۰۰۰ اولیه، ۵٬۰۰۰ فروش رفته، ۱٬۰۰۰ تلفات پیش‌تر؛ روز آخر ۳۰ تلفات از ~۴٬۰۰۰ زنده
+  const list = logs(5, { mortality: 100 });
+  list[list.length - 1] = { ...list[list.length - 1], mortality: 30 };
+  const saleList: Sale[] = [
+    {
+      id: "s1", flock_id: "f1", date: addDaysIso(start, 1), total_weight_kg: 100, price_per_kg: 90000,
+      buyer: null, count: 5000, deductions: 0, notes: null, created_by: null,
+      created_at: "", updated_at: "", deleted_at: null,
+    },
+  ];
+  const m = computeMetrics(flock({ initial_count: 10000 }), list, [], saleList, { today, marketPrice: 98000, feedPrice: 33500 });
+  const liveBefore = m.liveBirds + 30;
+  assert.ok(Math.abs(m.dailyMortalityPct - (30 / liveBefore) * 100) < 1e-9);
+});

@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
+import { IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
 
 export class UpdateSettingsDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) farmName?: string;
@@ -9,6 +9,10 @@ export class UpdateSettingsDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(21) @Max(70) targetAgeDays?: number;
   @IsOptional() @IsString() @MaxLength(60) defaultBreed?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(30) feedAlertDays?: number;
+  /** آستانه تلفات روزانه (٪) */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.05) @Max(20) dailyMortalityAlertPct?: number;
+  /** آستانه افت مصرف آب (٪) */
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(90) waterDropAlertPct?: number;
 }
 
 export class UpdateFarmDto {

@@ -72,6 +72,10 @@ export interface FarmSettings {
   default_breed: string;
   /** آستانه هشدار انبار دان (روز) */
   feed_alert_days?: number;
+  /** آستانه هشدار نرخ تلفات روزانه (٪) */
+  daily_mortality_alert_pct?: number;
+  /** آستانه هشدار افت مصرف آب (٪) */
+  water_drop_alert_pct?: number;
   timezone: string;
   updated_at: string;
 }
@@ -83,6 +87,8 @@ export const DEFAULT_SETTINGS: Omit<FarmSettings, "farm_id" | "updated_at"> = {
   target_age_days: 42,
   default_breed: "راس ۳۰۸",
   feed_alert_days: 3,
+  daily_mortality_alert_pct: 0.5,
+  water_drop_alert_pct: 10,
   timezone: "Asia/Tehran",
 };
 

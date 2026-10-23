@@ -106,6 +106,10 @@ export const farmSettings = pgTable("farm_settings", {
   defaultBreed: text("default_breed").notNull(),
   /** آستانه هشدار انبار: کمتر از این تعداد روزِ مصرف باقی‌مانده = هشدار */
   feedAlertDays: integer("feed_alert_days").notNull().default(3),
+  /** آستانه هشدار نرخ تلفات روزانه (٪ از پرندگان زنده) */
+  dailyMortalityAlertPct: numeric("daily_mortality_alert_pct", { precision: 4, scale: 2 }).notNull().default("0.50"),
+  /** آستانه هشدار افت مصرف آب (٪ نسبت به میانگین سه روز قبل) */
+  waterDropAlertPct: numeric("water_drop_alert_pct", { precision: 4, scale: 2 }).notNull().default("10.00"),
   timezone: text("timezone").notNull().default("Asia/Tehran"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

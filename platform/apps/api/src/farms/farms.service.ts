@@ -51,6 +51,8 @@ export class FarmsService {
         defaultBreed: DEFAULT_SETTINGS.default_breed,
         timezone: DEFAULT_SETTINGS.timezone,
         feedAlertDays: DEFAULT_SETTINGS.feed_alert_days ?? 3,
+        dailyMortalityAlertPct: String(DEFAULT_SETTINGS.daily_mortality_alert_pct ?? 0.5),
+        waterDropAlertPct: String(DEFAULT_SETTINGS.water_drop_alert_pct ?? 10),
       });
     });
     return this.get(farmId);
@@ -68,6 +70,8 @@ export class FarmsService {
         defaultBreed: DEFAULT_SETTINGS.default_breed,
         timezone: DEFAULT_SETTINGS.timezone,
         feedAlertDays: DEFAULT_SETTINGS.feed_alert_days ?? 3,
+        dailyMortalityAlertPct: String(DEFAULT_SETTINGS.daily_mortality_alert_pct ?? 0.5),
+        waterDropAlertPct: String(DEFAULT_SETTINGS.water_drop_alert_pct ?? 10),
       });
       return this.settings(farmId);
     }
@@ -91,6 +95,8 @@ export class FarmsService {
         targetAgeDays: dto.targetAgeDays ?? current.target_age_days,
         defaultBreed: dto.defaultBreed?.slice(0, 60) ?? current.default_breed,
         feedAlertDays: dto.feedAlertDays ?? current.feed_alert_days ?? 3,
+        dailyMortalityAlertPct: String(dto.dailyMortalityAlertPct ?? current.daily_mortality_alert_pct ?? 0.5),
+        waterDropAlertPct: String(dto.waterDropAlertPct ?? current.water_drop_alert_pct ?? 10),
         updatedAt: new Date(),
       })
       .where(eq(farmSettings.farmId, farmId));

@@ -163,6 +163,8 @@ export async function seed(db: Database) {
     targetAgeDays: 42,
     defaultBreed: "راس ۳۰۸",
     feedAlertDays: 3,
+    dailyMortalityAlertPct: "0.50",
+    waterDropAlertPct: "10.00",
     timezone: "Asia/Tehran",
   });
 

@@ -31,10 +31,21 @@ export class AnalyticsService {
       marketPrice: Number(row?.marketPrice ?? 98000),
       feedPrice: Number(row?.feedPrice ?? 33500),
       timezone: row?.timezone ?? "Asia/Tehran",
+      dailyMortalityAlertPct: Number(row?.dailyMortalityAlertPct ?? 0.5),
+      waterDropAlertPct: Number(row?.waterDropAlertPct ?? 10),
     };
   }
 
-  private async metricsFor(flockRow: any, settings: { marketPrice: number; feedPrice: number; timezone: string }): Promise<CycleMetrics> {
+  private async metricsFor(
+    flockRow: any,
+    settings: {
+      marketPrice: number;
+      feedPrice: number;
+      timezone: string;
+      dailyMortalityAlertPct: number;
+      waterDropAlertPct: number;
+    },
+  ): Promise<CycleMetrics> {
     const flock = toFlock(flockRow);
     const [logRows, costRows, saleRows, weightRows] = await Promise.all([
       this.db.select().from(dailyLogs).where(and(eq(dailyLogs.flockId, flock.id), isNull(dailyLogs.deletedAt))).orderBy(asc(dailyLogs.date)),
@@ -48,7 +59,13 @@ export class AnalyticsService {
       logRows.map(toLog),
       costRows.map(toExpense),
       saleRows.map(toSale),
-      { today: todayIso(settings.timezone), marketPrice: settings.marketPrice, feedPrice: settings.feedPrice },
+      {
+        today: todayIso(settings.timezone),
+        marketPrice: settings.marketPrice,
+        feedPrice: settings.feedPrice,
+        dailyMortalityAlertPct: settings.dailyMortalityAlertPct,
+        waterDropAlertPct: settings.waterDropAlertPct,
+      },
       weightRows.map(toWeightSample),
     );
   }
