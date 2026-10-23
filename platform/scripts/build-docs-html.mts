@@ -59,6 +59,21 @@ const brokenLinks = [...body.matchAll(/href="#([^"]+)"/g)]
   .map((m) => decodeURIComponent(m[1]!))
   .filter((id) => !ids.has(id));
 
+/**
+ * تصویرهای سند درون همان فایل جا می‌گیرند (base64) تا «یک فایل» واقعاً یک فایل
+ * بماند و به پوشه کنارش وابسته نباشد.
+ */
+const embedded = body.replace(/<img([^>]*?)src="(\.?\/?[^":]+)"([^>]*)>/g, (all, pre: string, src: string, post: string) => {
+  try {
+    const file = join(docsDir, src.replace(/^\.\//, ""));
+    const mime = file.endsWith(".png") ? "image/png" : file.endsWith(".jpg") ? "image/jpeg" : null;
+    if (!mime) return all;
+    return `<img${pre}src="data:${mime};base64,${readFileSync(file).toString("base64")}"${post}>`;
+  } catch {
+    return all;
+  }
+});
+
 const schema = read("schema.sql");
 const openapi = read("openapi.yaml");
 const generatedAt = new Date().toISOString().slice(0, 10);
@@ -174,6 +189,15 @@ const html = `<!doctype html>
   summary { cursor: pointer; font-weight: 700; color: var(--brand); }
   details pre { max-height: 32rem; overflow: auto; margin-top: 0.8rem; }
 
+  img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin: 0.6rem 0;
+    page-break-inside: avoid;
+  }
+
   .cover {
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -188,7 +212,16 @@ const html = `<!doctype html>
     body { padding: 0; max-width: none; font-size: 11.5pt; line-height: 1.75; }
     h2 { page-break-after: avoid; }
     a { color: inherit; }
-    .cover { page-break-after: always; }
+    img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin: 0.6rem 0;
+    page-break-inside: avoid;
+  }
+
+  .cover { page-break-after: always; }
     details { page-break-inside: avoid; }
     details[open] pre { max-height: none; }
   }
@@ -203,7 +236,7 @@ const html = `<!doctype html>
   </div>
 </header>
 
-${body}
+${embedded}
 
 <hr />
 
