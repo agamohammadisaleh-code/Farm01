@@ -1,0 +1,1315 @@
+# مرغ‌یار — مشخصات OpenAPI (تولیدشده از سرور در حال اجرا)
+# منبع: http://127.0.0.1:4210/api/docs-json · سند تعاملی: http://127.0.0.1:4210/api/docs
+openapi: 3.0.0
+paths:
+  /api/v1/health:
+    get:
+      operationId: HealthController_health
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      tags:
+        - Health
+  /api/v1/auth/register:
+    post:
+      operationId: AuthController_register
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDto'
+      responses:
+        '201':
+          description: ''
+      tags:
+        - auth
+  /api/v1/auth/login:
+    post:
+      operationId: AuthController_login
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+      responses:
+        '200':
+          description: ''
+      tags:
+        - auth
+  /api/v1/auth/refresh:
+    post:
+      operationId: AuthController_refresh
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshDto'
+      responses:
+        '200':
+          description: ''
+      tags:
+        - auth
+  /api/v1/auth/logout:
+    post:
+      operationId: AuthController_logout
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshDto'
+      responses:
+        '200':
+          description: ''
+      tags:
+        - auth
+  /api/v1/auth/me:
+    get:
+      operationId: AuthController_me
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - auth
+    patch:
+      operationId: AuthController_updateProfile
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - auth
+  /api/v1/auth/change-password:
+    post:
+      operationId: AuthController_changePassword
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - auth
+  /api/v1/auth/switch-farm:
+    post:
+      operationId: AuthController_switchFarm
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwitchFarmDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - auth
+  /api/v1/farm:
+    get:
+      operationId: FarmsController_get
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+    post:
+      operationId: FarmsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFarmDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+    patch:
+      operationId: FarmsController_updateFarm
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFarmDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+  /api/v1/farm/settings:
+    get:
+      operationId: FarmsController_settings
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+    patch:
+      operationId: FarmsController_updateSettings
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingsDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+  /api/v1/farm/members:
+    get:
+      operationId: FarmsController_members
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+    post:
+      operationId: FarmsController_addMember
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+  /api/v1/farm/members/{userId}:
+    patch:
+      operationId: FarmsController_updateMemberRole
+      parameters:
+        - name: userId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+    delete:
+      operationId: FarmsController_removeMember
+      parameters:
+        - name: userId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - farm
+  /api/v1/halls:
+    get:
+      operationId: HallsController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - halls
+    post:
+      operationId: HallsController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHallDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - halls
+  /api/v1/halls/{id}:
+    get:
+      operationId: HallsController_get
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - halls
+    patch:
+      operationId: HallsController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHallDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - halls
+    delete:
+      operationId: HallsController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - halls
+  /api/v1/flocks:
+    get:
+      operationId: FlocksController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+    post:
+      operationId: FlocksController_create
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFlockDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+  /api/v1/flocks/{id}:
+    get:
+      operationId: FlocksController_get
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+    patch:
+      operationId: FlocksController_update
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFlockDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+    delete:
+      operationId: FlocksController_remove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+  /api/v1/flocks/{id}/stats:
+    get:
+      operationId: FlocksController_stats
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+  /api/v1/flocks/{id}/close:
+    post:
+      operationId: FlocksController_close
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseFlockDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+  /api/v1/flocks/{id}/reopen:
+    post:
+      operationId: FlocksController_reopen
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - flocks
+  /api/v1/analytics/overview:
+    get:
+      operationId: AnalyticsController_overview
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analytics
+  /api/v1/analytics/flocks/{id}:
+    get:
+      operationId: AnalyticsController_flock
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - analytics
+  /api/v1/flocks/{flockId}/health:
+    get:
+      operationId: HealthController_summary
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+  /api/v1/flocks/{flockId}/vaccinations:
+    get:
+      operationId: HealthController_vaccinations
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+    post:
+      operationId: HealthController_createVaccination
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVaccinationDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+  /api/v1/flocks/{flockId}/vaccinations/{id}:
+    patch:
+      operationId: HealthController_updateVaccination
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVaccinationDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+    delete:
+      operationId: HealthController_removeVaccination
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+  /api/v1/flocks/{flockId}/medications:
+    get:
+      operationId: HealthController_medications
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+    post:
+      operationId: HealthController_createMedication
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMedicationDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+  /api/v1/flocks/{flockId}/medications/{id}:
+    delete:
+      operationId: HealthController_removeMedication
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - health
+  /api/v1/flocks/{flockId}/logs:
+    get:
+      operationId: LogsController_list
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - logs
+    post:
+      operationId: LogsController_save
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveLogDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - logs
+  /api/v1/flocks/{flockId}/logs/{id}:
+    delete:
+      operationId: LogsController_remove
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - logs
+  /api/v1/farm/inventory:
+    get:
+      operationId: InventoryController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - inventory
+  /api/v1/farm/inventory/set:
+    post:
+      operationId: InventoryController_set
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetInventoryDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - inventory
+  /api/v1/farm/inventory/adjust:
+    post:
+      operationId: InventoryController_adjust
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustInventoryDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - inventory
+  /api/v1/flocks/{flockId}/weights:
+    get:
+      operationId: WeightSamplesController_list
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - weights
+    post:
+      operationId: WeightSamplesController_create
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWeightSampleDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - weights
+  /api/v1/flocks/{flockId}/weights/{id}:
+    delete:
+      operationId: WeightSamplesController_remove
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - weights
+  /api/v1/flocks/{flockId}/expenses:
+    get:
+      operationId: ExpensesController_list
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - expenses
+    post:
+      operationId: ExpensesController_create
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - expenses
+  /api/v1/flocks/{flockId}/expenses/{id}:
+    patch:
+      operationId: ExpensesController_update
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExpenseDto'
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - expenses
+    delete:
+      operationId: ExpensesController_remove
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - expenses
+  /api/v1/flocks/{flockId}/sales:
+    get:
+      operationId: SalesController_list
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - sales
+    post:
+      operationId: SalesController_create
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSaleDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - sales
+  /api/v1/flocks/{flockId}/sales/{id}:
+    delete:
+      operationId: SalesController_remove
+      parameters:
+        - name: flockId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - sales
+  /api/v1/reminders:
+    get:
+      operationId: RemindersController_list
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - reminders
+  /api/v1/reminders/badge:
+    get:
+      operationId: RemindersController_badge
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - reminders
+  /api/v1/reports/flocks/{id}:
+    get:
+      operationId: ReportsController_flock
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - reports
+  /api/v1/reports/flocks/{id}/export:
+    get:
+      operationId: ReportsController_exportFlock
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: format
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - reports
+  /api/v1/reports/farm:
+    get:
+      operationId: ReportsController_farm
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - reports
+  /api/v1/reports/farm/export:
+    get:
+      operationId: ReportsController_exportFarm
+      parameters:
+        - name: format
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - reports
+  /api/v1/ai/status:
+    get:
+      operationId: AiController_status
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai
+  /api/v1/ai/flocks/{id}/forecast:
+    get:
+      operationId: AiController_forecast
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai
+  /api/v1/ai/flocks/{id}/loading-date:
+    get:
+      operationId: AiController_loadingDate
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai
+  /api/v1/ai/flocks/{id}/risk:
+    get:
+      operationId: AiController_risk
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai
+  /api/v1/ai/farm/feed:
+    get:
+      operationId: AiController_feed
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - ai
+  /api/v1/assistant/examples:
+    get:
+      operationId: AssistantController_examples
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - assistant
+  /api/v1/assistant/message:
+    post:
+      operationId: AssistantController_message
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantMessageDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - assistant
+  /api/v1/assistant/confirm:
+    post:
+      operationId: AssistantController_confirm
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantConfirmDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - assistant
+  /api/v1/assistant/voice:
+    post:
+      operationId: AssistantController_voice
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantVoiceDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - assistant
+  /api/v1/sync/push:
+    post:
+      operationId: SyncController_push
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPushDto'
+      responses:
+        '201':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - sync
+  /api/v1/sync/pull:
+    get:
+      operationId: SyncController_pull
+      parameters: []
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+      tags:
+        - sync
+info:
+  title: Farm API
+  description: API مرغ‌یار — مدیریت پرورش مرغ گوشتی
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  securitySchemes:
+    bearer:
+      scheme: bearer
+      bearerFormat: JWT
+      type: http
+  schemas:
+    RegisterDto:
+      type: object
+      properties: {}
+    LoginDto:
+      type: object
+      properties: {}
+    RefreshDto:
+      type: object
+      properties: {}
+    UpdateProfileDto:
+      type: object
+      properties: {}
+    ChangePasswordDto:
+      type: object
+      properties: {}
+    SwitchFarmDto:
+      type: object
+      properties: {}
+    CreateFarmDto:
+      type: object
+      properties: {}
+    UpdateFarmDto:
+      type: object
+      properties: {}
+    UpdateSettingsDto:
+      type: object
+      properties: {}
+    AddMemberDto:
+      type: object
+      properties: {}
+    UpdateMemberRoleDto:
+      type: object
+      properties: {}
+    CreateHallDto:
+      type: object
+      properties: {}
+    UpdateHallDto:
+      type: object
+      properties: {}
+    CreateFlockDto:
+      type: object
+      properties: {}
+    UpdateFlockDto:
+      type: object
+      properties: {}
+    CloseFlockDto:
+      type: object
+      properties: {}
+    CreateVaccinationDto:
+      type: object
+      properties: {}
+    UpdateVaccinationDto:
+      type: object
+      properties: {}
+    CreateMedicationDto:
+      type: object
+      properties: {}
+    SaveLogDto:
+      type: object
+      properties: {}
+    SetInventoryDto:
+      type: object
+      properties: {}
+    AdjustInventoryDto:
+      type: object
+      properties: {}
+    CreateWeightSampleDto:
+      type: object
+      properties: {}
+    CreateExpenseDto:
+      type: object
+      properties: {}
+    CreateSaleDto:
+      type: object
+      properties: {}
+    AssistantMessageDto:
+      type: object
+      properties: {}
+    AssistantConfirmDto:
+      type: object
+      properties: {}
+    AssistantVoiceDto:
+      type: object
+      properties: {}
+    SyncPushDto:
+      type: object
+      properties: {}
