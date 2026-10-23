@@ -24,7 +24,7 @@ export interface StdDay {
 }
 
 /** درون‌یابی هموار مونوتون (PCHIP) برای جلوگیری از پرش ناگهانی در منحنی روزانه */
-function pchip(xs: number[], ys: number[], x: number): number {
+export function smoothInterpolate(xs: number[], ys: number[], x: number): number {
   const n = xs.length;
   if (x <= xs[0]) return ys[0];
   if (x >= xs[n - 1]) return ys[n - 1];
@@ -66,7 +66,7 @@ const CS = STANDARD_ANCHORS.map((a) => a.cumFeedG);
 
 function interpolate(day: number, key: "weightG" | "cumFeedG"): number {
   const d = Math.max(1, Math.min(49, day));
-  return pchip(XS, key === "weightG" ? WS : CS, d);
+  return smoothInterpolate(XS, key === "weightG" ? WS : CS, d);
 }
 
 export const MAX_STANDARD_DAY = 49;

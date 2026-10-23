@@ -959,6 +959,165 @@ describe("Farm API (e2e)", () => {
     });
   });
 
+  describe("دستیار فارسی و هوش مصنوعی (بخش ۶)", () => {
+    it("جمله فارسی به پیشنهاد تبدیل می‌شود و بی‌تأیید ثبت نمی‌شود", async () => {
+      const before = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+
+      const preview = await request(server)
+        .post("/api/v1/assistant/message")
+        .set(auth(ownerToken))
+        .send({ text: "امروز ۷ تا تلف شد و ۸۵ کیلو دان خورد و آبش ۱۷۰ لیتر بود", flockId })
+        .expect(201);
+
+      expect(preview.body.kind).toBe("draft");
+      expect(preview.body.intent).toBe("log_daily");
+      expect(preview.body.requiresConfirm).toBe(true);
+      expect(preview.body.entities.mortality).toBe(7);
+      expect(preview.body.entities.feedKg).toBe(85);
+      expect(preview.body.entities.waterLiter).toBe(170);
+      expect(preview.body.reply).toContain("تأیید");
+
+      const afterPreview = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      expect(afterPreview.body.length).toBe(before.body.length);
+    });
+
+    it("با تأیید کاربر، ثبت روزانه واقعاً ساخته می‌شود", async () => {
+      const res = await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(ownerToken))
+        .send({ text: "۸۰ کیلو دان و ۱۶۰ لیتر آب و ۴ تلفات", flockId, confirm: true })
+        .expect(201);
+
+      expect(res.body.kind).toBe("done");
+      expect(res.body.created.type).toBe("dailyLog");
+
+      const logs = await request(server).get(`/api/v1/flocks/${flockId}/logs`).set(auth(ownerToken)).expect(200);
+      const row = logs.body.find((l: any) => l.date === res.body.created.date);
+      expect(row.mortality).toBe(4);
+      expect(Number(row.feed_kg)).toBe(80);
+      expect(Number(row.water_liter)).toBe(160);
+    });
+
+    it("بدون تأیید صریح، ثبت رد می‌شود", async () => {
+      await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(ownerToken))
+        .send({ text: "۳ تا تلف شد", flockId, confirm: false })
+        .expect(400);
+    });
+
+    it("فروش و هزینه از جمله فارسی ساخته می‌شوند", async () => {
+      const sale = await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(ownerToken))
+        .send({ text: "دیروز ۵۰۰ کیلو به کشتارگاه فروختم کیلویی ۹۵ هزار تومان", flockId, confirm: true })
+        .expect(201);
+      expect(sale.body.created.type).toBe("sale");
+      expect(Number(sale.body.created.total_weight_kg)).toBe(500);
+
+      const expense = await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(ownerToken))
+        .send({ text: "۲ میلیون تومان دارو خریدم", flockId, confirm: true })
+        .expect(201);
+      expect(expense.body.created.type).toBe("expense");
+      expect(Number(expense.body.created.amount)).toBe(20_000_000);
+
+      const costs = await request(server).get(`/api/v1/flocks/${flockId}/expenses`).set(auth(ownerToken)).expect(200);
+      expect(costs.body.some((c: any) => c.category === "medication")).toBe(true);
+    });
+
+    it("وزن‌گیری با جمله فارسی ثبت می‌شود", async () => {
+      const res = await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(ownerToken))
+        .send({ text: "میانگین وزن ۱۴۰۰ گرم از ۴۰ نمونه", flockId, confirm: true })
+        .expect(201);
+      expect(res.body.created.type).toBe("weightSample");
+      expect(res.body.created.avg_weight_gr).toBe(1400);
+    });
+
+    it("پرسش، پاسخ می‌گیرد و چیزی ثبت نمی‌کند", async () => {
+      const res = await request(server)
+        .post("/api/v1/assistant/message")
+        .set(auth(ownerToken))
+        .send({ text: "مصرف آب چطور بوده؟", flockId })
+        .expect(201);
+      expect(res.body.kind).toBe("answer");
+      expect(res.body.intent).toBe("query_water");
+      expect(res.body.requiresConfirm).toBe(false);
+      expect(res.body.data.lastWaterL).toBeGreaterThan(0);
+    });
+
+    it("افزودن جمله ناقص، سؤال تکمیلی می‌پرسد", async () => {
+      const res = await request(server)
+        .post("/api/v1/assistant/message")
+        .set(auth(ownerToken))
+        .send({ text: "خریدم", flockId })
+        .expect(201);
+      expect(res.body.kind).toBe("clarify");
+      expect(res.body.missing.length).toBeGreaterThan(0);
+    });
+
+    it("تبدیل گفتار در نبود موتور، خطای روشن ۵۰۳ می‌دهد", async () => {
+      await request(server)
+        .post("/api/v1/assistant/voice")
+        .set(auth(ownerToken))
+        .send({ audioBase64: "UklGRiQAAABXQVZFZm10IBAAAAABAAEA" })
+        .expect(503);
+    });
+
+    it("کارگر می‌تواند ثبت کند، دامپزشک نمی‌تواند", async () => {
+      await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(workerToken))
+        .send({ text: "۲ تا تلف شد", flockId, confirm: true })
+        .expect(201);
+      await request(server)
+        .post("/api/v1/assistant/confirm")
+        .set(auth(vetToken))
+        .send({ text: "۲ تا تلف شد", flockId, confirm: true })
+        .expect(403);
+    });
+
+    it("تاریخ بارگیری محلی با منحنی نژاد و جدول تصمیم برمی‌گردد", async () => {
+      const res = await request(server).get(`/api/v1/ai/flocks/${flockId}/loading-date`).set(auth(ownerToken)).expect(200);
+      expect(res.body.fallback).toBe(true);
+      expect(res.body.breed).toContain("راس");
+      expect(res.body.breakdown.length).toBeGreaterThan(10);
+      expect(res.body.breakdown[0].daysFromNow).toBe(0);
+      expect(res.body.reason.length).toBeGreaterThan(10);
+    });
+
+    it("پیش‌بینی وزن از منحنی نژادی همان گله استفاده می‌کند", async () => {
+      const cobb = await request(server)
+        .post("/api/v1/flocks")
+        .set(auth(ownerToken))
+        .send({ hallId, name: "گله کاب", startDate, initialCount: 5000, breed: "کاب ۵۰۰" })
+        .expect(201);
+
+      const res = await request(server).get(`/api/v1/ai/flocks/${cobb.body.id}/forecast`).set(auth(ownerToken)).expect(200);
+      expect(res.body.breed).toBe("کاب ۵۰۰");
+      // منحنی کاب در روز ۴۲ وزن کمتری از راس دارد
+      const day42 = res.body.curve.find((p: any) => p.ageDays === 42);
+      if (day42) expect(day42.weightGr).toBe(2820);
+    });
+
+    it("ریسک بیماری، روند آب/دان/تلفات و آستانه‌های مزرعه را برمی‌گرداند", async () => {
+      const res = await request(server).get(`/api/v1/ai/flocks/${flockId}/risk`).set(auth(ownerToken)).expect(200);
+      expect(res.body.trends).toBeDefined();
+      expect(res.body.thresholds.waterDropAlertPct).toBe(10);
+      expect(res.body.thresholds.dailyMortalityAlertPct).toBe(0.5);
+      expect(res.body.recommendation.length).toBeGreaterThan(5);
+    });
+
+    it("نمونه‌جمله‌ها برای رابط کاربری برمی‌گردند", async () => {
+      const res = await request(server).get("/api/v1/assistant/examples").set(auth(ownerToken)).expect(200);
+      expect(res.body.examples.length).toBeGreaterThan(3);
+      expect(res.body.tips.length).toBeGreaterThan(2);
+    });
+  });
+
   describe("مدیریت کاربران", () => {
     it("کاربر نام خود را ویرایش می‌کند", async () => {
       const res = await request(server).patch("/api/v1/auth/me").set(auth(ownerToken)).send({ name: "مالک جدید" }).expect(200);

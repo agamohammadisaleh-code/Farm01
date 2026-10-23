@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>مرغ‌یار — دستیار گفتاری</title>
+<style>
+  :root {
+    --bg: #f5f7f5; --card: #ffffff; --ink: #16302a; --muted: #6b7f78;
+    --green: #1e8a5f; --green-soft: #e6f4ee; --amber: #b06a00; --amber-soft: #fdf1dc;
+    --red: #b3382e; --red-soft: #fbe9e7; --line: #e2e9e6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: Vazirmatn, "IRANSans", Tahoma, system-ui, sans-serif; line-height: 1.8;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 24px 16px 80px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .logo { width: 42px; height: 42px; border-radius: 12px; background: var(--green); color: #fff;
+    display: grid; place-items: center; font-size: 22px; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input, select, button, textarea { font-family: inherit; font-size: 15px; }
+  input, select, textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: #fff; color: var(--ink);
+  }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button {
+    border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; font-weight: 600;
+    background: var(--green); color: #fff;
+  }
+  button.ghost { background: var(--green-soft); color: var(--green); }
+  button.warn { background: var(--red-soft); color: var(--red); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { background: var(--green-soft); color: var(--green); border-radius: 999px; padding: 6px 12px;
+    font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+  .chip:hover { border-color: var(--green); }
+  .chat { display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 14px; white-space: pre-wrap; }
+  .me { align-self: flex-start; background: var(--green); color: #fff; border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-end; background: #f2f6f4; border-bottom-left-radius: 4px; }
+  .bot.answer { background: #eef4fb; }
+  .bot.warnbox { background: var(--amber-soft); color: #5c3a00; }
+  .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .actions { display: flex; gap: 8px; margin-top: 8px; }
+  .composer { display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea { resize: none; height: 52px; }
+  .mic { width: 52px; height: 52px; border-radius: 50%; font-size: 20px; padding: 0; background: var(--green); }
+  .mic.recording { background: var(--red); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .hidden { display: none !important; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--green-soft); color: var(--green); margin-inline-start: 6px; }
+  .badge.warn { background: var(--amber-soft); color: var(--amber); }
+  .badge.err { background: var(--red-soft); color: var(--red); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🐔</div>
+    <div>
+      <h1>دستیار گفتاری مرغ‌یار</h1>
+    </div>
+  </header>
+  <p class="sub">ثبت داده با جمله فارسی — «امروز ۱۲ تا تلف شد و ۹۰ کیلو دان خورد» — بدون فرم و بدون کلیک اضافه.</p>
+
+  <section id="loginCard" class="card">
+    <label>ورود به حساب نمونه</label>
+    <div class="row" style="margin-bottom:10px">
+      <input id="email" value="owner@farm.ir" dir="ltr" />
+      <input id="password" type="password" value="Secret1234" dir="ltr" />
+    </div>
+    <button id="loginBtn">ورود</button>
+    <p class="hint">حساب نمونه از داده‌های آزمایشی ساخته می‌شود. توکن فقط در حافظه همین صفحه می‌ماند.</p>
+  </section>
+
+  <section id="appCard" class="hidden">
+    <div class="card">
+      <label>گله</label>
+      <select id="flock"></select>
+    </div>
+
+    <div class="card">
+      <div id="chat" class="chat"></div>
+      <div class="composer" style="margin-top:12px">
+        <textarea id="text" placeholder="مثلاً: دیروز ۱۵۰۰ کیلو به کشتارگاه فروختم کیلویی ۹۸ هزار تومان"></textarea>
+        <button id="micBtn" class="mic" title="ضبط صدا">🎤</button>
+        <button id="sendBtn">ارسال</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="hint" id="voiceHint"></p>
+    </div>
+  </section>
+</div>
+
+<script src="/demo/app.js" defer></script>
+</body>
+</html>

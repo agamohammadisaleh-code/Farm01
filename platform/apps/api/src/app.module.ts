@@ -14,6 +14,7 @@ import { RemindersModule } from "./reminders/reminders.module";
 import { ReportsModule } from "./reports/reports.module";
 import { AiModule } from "./ai/ai.module";
 import { FarmsModule } from "./farms/farms.module";
+import { AssistantModule } from "./assistant/assistant.module";
 import { DatabaseModule } from "./db/db.module";
 import { HealthController } from "./health.controller";
 
@@ -35,6 +36,7 @@ import { HealthController } from "./health.controller";
     RemindersModule,
     ReportsModule,
     AiModule,
+    AssistantModule,
   ],
   controllers: [HealthController],
 })
