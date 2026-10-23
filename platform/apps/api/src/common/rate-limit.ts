@@ -7,6 +7,8 @@ import {
   SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import type { OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { connectRedis, type RedisConnection } from "./redis";
 
 /**
  * محدودسازی نرخ درخواست (Rate limiting).
@@ -15,11 +17,12 @@ import { Reflector } from "@nestjs/core";
  * `/auth/login` گذرواژه‌ها را حدس بزند، یا با ارسال انبوه درخواست، CPU
  * سرور را (که هر ورود یک bcrypt هزینه‌بر اجرا می‌کند) اشباع کند.
  *
- * پیاده‌سازی: «پنجره ثابت» در حافظه فرایند. برای یک نمونه API کافی و
- * بدون وابستگی بیرونی است. محدودیت آگاهانه: در استقرار چندنمونه‌ای
- * (multi-instance) هر نمونه سهمیه جدا دارد؛ جایگزینی با Redis در نقشه
- * راه‌رو (بخش ۱۰ سند معماری) آمده است. رابط `RateLimitStore` برای همین
- * جدا شده تا تعویض انبار، بدون تغییر منطق انجام شود.
+ * پیاده‌سازی: «پنجره ثابت». دو انبار دارد و انتخاب خودکار است:
+ *   - `MemoryRateLimitStore` — بدون وابستگی، برای اجرای تک‌نمونه‌ای و آزمون؛
+ *   - `RedisRateLimitStore` — با `REDIS_URL`؛ شمارنده بین همه نمونه‌ها مشترک
+ *     می‌شود، پس پنج نمونه API یک سهمیه دارند نه پنج سهمیه.
+ * اگر Redis بالا نیاید، بی‌صدا به حالت حافظه برمی‌گردیم (Redis بهبود است، نه
+ * پیش‌شرط اجرا).
  */
 
 export interface RateLimitRule {
@@ -62,18 +65,26 @@ interface Bucket {
   resetAt: number;
 }
 
-/** انبار شمارنده‌ها؛ برای چندنمونه‌ای شدن با Redis جایگزین می‌شود */
+/**
+ * انبار شمارنده‌ها.
+ *
+ * `hit` آگاهانه async است: انبار Redis ناگزیر async است و اگر رابط همگام
+ * می‌بود، مسیر Redis عملاً غیرممکن یا پر از هک می‌شد.
+ */
 export interface RateLimitStore {
-  hit(key: string, windowMs: number, now: number): { count: number; resetAt: number };
-  reset(): void;
+  hit(key: string, windowMs: number, now: number): Promise<Bucket>;
+  reset(): Promise<void>;
+  /** نوع انبار، برای لاگ و سنجش */
+  readonly kind: "memory" | "redis";
 }
 
 export class MemoryRateLimitStore implements RateLimitStore {
+  readonly kind = "memory" as const;
   private readonly buckets = new Map<string, Bucket>();
   /** سقف تعداد سبدها تا حافظه با کلیدهای ساختگی رشد نکند */
   constructor(private readonly maxKeys = 10_000) {}
 
-  hit(key: string, windowMs: number, now: number) {
+  async hit(key: string, windowMs: number, now: number): Promise<Bucket> {
     const existing = this.buckets.get(key);
     if (!existing || existing.resetAt <= now) {
       const fresh = { count: 1, resetAt: now + windowMs };
@@ -92,9 +103,46 @@ export class MemoryRateLimitStore implements RateLimitStore {
     }
   }
 
-  reset() {
+  async reset() {
     this.buckets.clear();
   }
+}
+
+/**
+ * انبار مشترک روی Redis.
+ *
+ * `INCR` + `PEXPIRE` (فقط بار اول) دقیقاً همان پنجره ثابت است، ولی شمارنده
+ * میان نمونه‌ها مشترک. اگر Redis وسط کار قطع شود، همان درخواست به انبار
+ * حافظه‌ای می‌افتد تا سرویس قطع نشود.
+ */
+export class RedisRateLimitStore implements RateLimitStore {
+  readonly kind = "redis" as const;
+
+  constructor(
+    private readonly client: RedisConnection,
+    private readonly fallback = new MemoryRateLimitStore(),
+  ) {}
+
+  async hit(key: string, windowMs: number, now: number): Promise<Bucket> {
+    try {
+      const count = await this.client.incr(key);
+      if (count === 1) await this.client.pexpire(key, windowMs);
+      const ttl = await this.client.pttl(key);
+      return { count, resetAt: now + (ttl > 0 ? ttl : windowMs) };
+    } catch {
+      return this.fallback.hit(key, windowMs, now);
+    }
+  }
+
+  async reset() {
+    await this.fallback.reset();
+  }
+}
+
+/** انتخاب انبار: Redis اگر در دسترس باشد، وگرنه حافظه */
+export async function createRateLimitStore(url = process.env.REDIS_URL): Promise<RateLimitStore> {
+  const connection = await connectRedis(url);
+  return connection ? new RedisRateLimitStore(connection) : new MemoryRateLimitStore();
 }
 
 /** سقف کلی هر نشانی برای همه مسیرها — ترمز خام Nginx-like داخل خود API */
@@ -105,12 +153,34 @@ const DEFAULT_RULE: RateLimitRule = {
 };
 
 @Injectable()
-export class RateLimitGuard implements CanActivate {
-  readonly store = new MemoryRateLimitStore();
+export class RateLimitGuard implements CanActivate, OnModuleInit, OnModuleDestroy {
+  private storePromise: Promise<RateLimitStore> | null = null;
 
   constructor(private readonly reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  /** انبار تنبل ساخته می‌شود تا بالا آمدن برنامه معطل Redis نماند */
+  private store(): Promise<RateLimitStore> {
+    this.storePromise ??= createRateLimitStore();
+    return this.storePromise;
+  }
+
+  /**
+   * اتصال را همان بالا آمدن برنامه آغاز می‌کنیم تا هزینه اتصال (یا مهلت
+   * یک‌ثانیه‌ای Redis در دسترس‌نبودن) به اولین درخواست کاربر منتقل نشود.
+   */
+  onModuleInit() {
+    void this.store();
+  }
+
+  async onModuleDestroy() {
+    const store = await this.storePromise;
+    if (store?.kind === "redis") {
+      // اتصال در لایه redis مدیریت می‌شود؛ اینجا فقط اشاره‌گر رها می‌شود
+      this.storePromise = null;
+    }
+  }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     if (process.env.RATE_LIMIT_DISABLED === "1") return true;
 
     const handlerRules = this.reflector.getAllAndOverride<RateLimitRule[] | undefined>(RATE_LIMIT_KEY, [
@@ -118,6 +188,7 @@ export class RateLimitGuard implements CanActivate {
       context.getClass(),
     ]);
     const rules = handlerRules && handlerRules.length > 0 ? handlerRules : [DEFAULT_RULE];
+    const store = await this.store();
 
     const http = context.switchToHttp();
     const req: any = http.getRequest();
@@ -126,7 +197,7 @@ export class RateLimitGuard implements CanActivate {
 
     for (const rule of rules) {
       const key = `${rule.name}:${rule.by === "ip+email" ? `${ip}|${this.emailOf(req)}` : ip}`;
-      const bucket = this.store.hit(key, rule.windowMs, now);
+      const bucket = await store.hit(key, rule.windowMs, now);
       if (bucket.count > rule.limit) {
         const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
         try {
