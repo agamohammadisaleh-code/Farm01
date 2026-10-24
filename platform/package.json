@@ -32,9 +32,11 @@
     "docs:schema": "tsx scripts/dump-schema.mts",
     "docs:openapi": "node scripts/fetch-openapi.mjs",
     "check:security": "tsx scripts/check-guards.mts",
-    "docs:html": "tsx scripts/build-docs-html.mts"
+    "docs:html": "tsx scripts/build-docs-html.mts",
+    "docs:pdf": "tsx scripts/build-runbook-pdf.mts"
   },
   "devDependencies": {
+    "bidi-js": "^1.1.0",
     "marked": "^18.1.1",
     "react": "18.3.1",
     "react-dom": "18.3.1"

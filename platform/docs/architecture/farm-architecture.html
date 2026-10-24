@@ -3308,17 +3308,493 @@ components:
 <h2 id="پیوست-ج">پیوست ج — راهنمای اجرا (قدم به قدم)</h2>
 <p>نسخه متنی این پیوست در <code>docs/RUNBOOK.md</code> است و با همان محتوا اینجا آمده.</p>
 <div class="runbook"><h1 id="ra-راهنمای-اجرا-قدم-به-قدم">راهنمای اجرا — قدم به قدم</h1>
-<p>این سند همان مسیری است که برای بالا آوردن کل سامانه از <strong>صفر</strong> طی می‌شود:
-نصب، پایگاه داده، API، داشبورد وب، اپ موبایل، سرویس تحلیل، آزمون‌ها، مستندات و
-استقرار. هر قدم <strong>دستور</strong> دارد، <strong>خروجی مورد انتظار</strong> دارد، و یک <strong>نقطه بررسی</strong>
-که با آن مطمئن می‌شوید قدم درست انجام شده است.</p>
+<p>این سند، مسیر کامل بالا آوردن سامانه از <strong>صفر</strong> است. ترتیب گام‌ها مهم است: هر گام
+به گام قبلی تکیه دارد. برای همین همه‌چیز شماره‌گذاری شده است:</p>
+<ul>
+<li><strong>گام ۱ تا ۵:</strong> آماده‌سازی — نصب، بسته دامنه، پایگاه داده.</li>
+<li><strong>گام ۶ تا ۸:</strong> بالا آوردن API و داشبورد و آزمون ورود.</li>
+<li><strong>گام ۹ تا ۱۲:</strong> سرویس تحلیل و اپ موبایل و آزمون آفلاین.</li>
+<li><strong>گام ۱۳ تا ۱۵:</strong> آزمون‌ها، مستندات و همین PDF.</li>
+<li><strong>گام ۱۶ تا ۱۸:</strong> استقرار با Docker، چک‌لیست نهایی، خاموش‌کردن.</li>
+</ul>
+<p>هر گام سه بخش دارد: <strong>چه کاری</strong> (توضیح یک‌خطی)، <strong>دستور</strong> (چیزی که تایپ
+می‌کنید)، و <strong>نقطه بررسی</strong> (چطور مطمئن شوید درست انجام شد). اگر جایی خطا گرفتید،
+جدول عیب‌یابی در پیوست ج را ببینید.</p>
 <blockquote>
-<p>همه چیز در پوشه <code>platform/</code> است. دستورها از همین پوشه اجرا می‌شوند، مگر آن‌که
-خلافش نوشته شده باشد.</p>
+<p>همه دستورها از پوشه <code>platform/</code> اجرا می‌شوند، مگر آن‌که خلافش نوشته شده باشد.</p>
 </blockquote>
 <hr>
-<h2 id="ra-۰-نقشه‌ی-اجزا-و-پورت‌ها">۰. نقشه‌ی اجزا و پورت‌ها</h2>
-<p>پیش از هر دستوری، بدانید چه چیزی قرار است کجا بالا بیاید:</p>
+<h2 id="ra-گام-1-پیش‌نیازها-را-بررسی-کنید">گام 1. پیش‌نیازها را بررسی کنید</h2>
+<p><strong>چه کاری:</strong> مطمئن شوید Node، npm و Python با نسخه درست نصب‌اند.</p>
+<p>اول نسخه‌ها را ببینید:</p>
+<pre><code class="language-bash">node -v &amp;&amp; npm -v &amp;&amp; python3 --version
+</code></pre>
+<p>خروجی واقعی محیط آزموده‌شده:</p>
+<pre><code>v22.22.3
+10.9.8
+Python 3.11.2
+</code></pre>
+<p><strong>نقطه بررسی:</strong> هر سه عدد چاپ شدند. اگر <code>node -v</code> کمتر از ۲۰ بود، ادامه ندهید؛
+NestJS 11 و Vite 6 روی نسخه‌های قدیمی بالا نمی‌آیند. Docker فقط برای گام ۱۶ لازم
+است و اگر نصب نباشد، بقیه راهنما کار می‌کند.</p>
+<table>
+<thead>
+<tr>
+<th>ابزار</th>
+<th>نسخه لازم</th>
+<th>بررسی</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Node.js</td>
+<td>۲۰ یا بالاتر (با ۲۲ آزموده شده)</td>
+<td><code>node -v</code></td>
+</tr>
+<tr>
+<td>npm</td>
+<td>۱۰ یا بالاتر</td>
+<td><code>npm -v</code></td>
+</tr>
+<tr>
+<td>Python</td>
+<td>۳٫۱۰ یا بالاتر (با ۳٫۱۱ آزموده شده)</td>
+<td><code>python3 --version</code></td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>اختیاری، فقط برای استقرار</td>
+<td><code>docker compose version</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="ra-گام-2-کد-را-بگیرید-و-وابستگی‌ها-را-نصب-کنید">گام 2. کد را بگیرید و وابستگی‌ها را نصب کنید</h2>
+<p><strong>چه کاری:</strong> مخزن را کلون کنید و بسته‌ها را دقیقاً مطابق <code>package-lock.json</code> نصب کنید.</p>
+<ol>
+<li>مخزن را بگیرید و به پوشه پلتفرم بروید:</li>
+</ol>
+<pre><code class="language-bash">git clone https://github.com/you/Farm01.git Farm01
+cd Farm01/platform
+</code></pre>
+<ol start="2">
+<li>نصب را اجرا کنید:</li>
+</ol>
+<pre><code class="language-bash">npm ci
+</code></pre>
+<p><code>npm ci</code> را به‌جای <code>npm install</code> بزنید تا <strong>دقیقاً</strong> همان نسخه‌های قفل‌شده نصب
+شوند؛ نتیجه روی ماشین شما و CI یکی می‌شود.</p>
+<ol start="3">
+<li>اگر <code>npm ci</code> در دسترس نبود:</li>
+</ol>
+<pre><code class="language-bash">npm install --no-audit --no-fund
+</code></pre>
+<p>خروجی واقعی: نصب کامل در حدود <strong>۲۳ ثانیه</strong> (۹۲۶ بسته، شامل ورک‌اسپیس‌های
+<code>apps/*</code> و <code>packages/*</code>).</p>
+<p><strong>نقطه بررسی:</strong></p>
+<pre><code class="language-bash">ls node_modules/.bin | grep -c vite
+ls node_modules/vazirmatn/fonts/ttf/Vazirmatn-Regular.ttf
+</code></pre>
+<p>اولی باید عددی ۱ یا بیشتر بدهد، دومی باید مسیر فونت را چاپ کند. اگر فونت پیدا
+نشد، گزارش‌های PDF فارسی بی‌ریخت می‌شوند.</p>
+<hr>
+<h2 id="ra-گام-3-بسته-دامنه-را-بسازید-پیش‌نیاز-پنهان">گام 3. بسته دامنه را بسازید (پیش‌نیاز پنهان)</h2>
+<p><strong>چه کاری:</strong> <code>@farm/domain</code> را از سورس به <code>dist</code> ببرید.</p>
+<p>API و وب، بسته دامنه را از <strong>خروجی ساخته‌شده</strong> می‌خوانند، نه از سورس. اگر این
+گام را رد کنید، در گام ۶ با خطای <code>Cannot find module &#39;@farm/domain&#39;</code> روبه‌رو
+می‌شوید:</p>
+<pre><code class="language-bash">npm run build:domain
+</code></pre>
+<p>خروجی واقعی: حدود <strong>۲ ثانیه</strong>، بی‌پیام.</p>
+<p><strong>نقطه بررسی:</strong></p>
+<pre><code class="language-bash">ls packages/domain/dist/index.js &amp;&amp; node -e &quot;console.log(Object.keys(require(&#39;./packages/domain/dist&#39;)).length, &#39;export&#39;)&quot;
+</code></pre>
+<hr>
+<h2 id="ra-گام-4-پایگاه-داده-را-بسازید-pglite-بدون-نصب-چیزی">گام 4. پایگاه داده را بسازید (PGlite، بدون نصب چیزی)</h2>
+<p><strong>چه کاری:</strong> جدول‌ها را با مهاجرت‌ها ایجاد کنید.</p>
+<p>PGlite همان PostgreSQL است که به WASM کامپایل شده؛ همان <code>numeric</code>، همان
+<code>timestamptz</code>، همان ایندکس یکتا و <code>ON CONFLICT</code>. فقط یک نویسنده درون‌فرایند
+دارد و برای تولید مناسب نیست — برای تولید، گام ۱۶ را ببینید.</p>
+<ol>
+<li>مسیر داده را تعیین کنید (روی دیسک، تا با ری‌استارت پاک نشود):</li>
+</ol>
+<pre><code class="language-bash">export PGLITE_DATA_DIR=./.pgdata
+</code></pre>
+<ol start="2">
+<li>مهاجرت‌ها را اجرا کنید:</li>
+</ol>
+<pre><code class="language-bash">npm run db:migrate
+</code></pre>
+<p>خروجی واقعی:</p>
+<pre><code>[Database] PGlite (./.pgdata) — مناسب توسعه و تست
+مهاجرت‌های اجراشده: 0001_init.sql, 0002_model_v2.sql, 0003_operations.sql, 0004_alert_thresholds.sql
+</code></pre>
+<ol start="3">
+<li>اگر خواستید مطمئن شوید تکرارپذیر است، همان دستور را بار دوم بزنید:</li>
+</ol>
+<pre><code class="language-bash">npm run db:migrate
+</code></pre>
+<p>این بار می‌گوید «مهاجرت جدیدی نبود.» — مهاجرت‌ها در جدول <code>_migrations</code> ثبت
+می‌شوند و اجرای دوباره چیزی را خراب نمی‌کند.</p>
+<p><strong>اگر Postgres واقعی می‌خواهید:</strong> به‌جای این گام، <code>docker compose up -d postgres</code>
+را بزنید و این‌ها را صادر کنید: <code>PG_DRIVER=postgres</code> و
+<code>DATABASE_URL=postgres://farm:farm@localhost:5432/farm</code>، بعد همان
+<code>npm run db:migrate</code> را اجرا کنید.</p>
+<hr>
+<h2 id="ra-گام-5-داده-نمونه-را-بریزید">گام 5. داده نمونه را بریزید</h2>
+<p><strong>چه کاری:</strong> یک مزرعه، دو سالن و یک گله فعال با ۲۸ روز ثبت بسازید.</p>
+<pre><code class="language-bash">npm run db:seed
+</code></pre>
+<p>خروجی واقعی:</p>
+<pre><code>[Seed] داده نمونه ساخته شد: owner@farm.ir / Secret1234 (امروز 2026-10-24)
+</code></pre>
+<p><strong>نقطه بررسی:</strong> تعداد جدول‌های دامنه را بشمارید:</p>
+<pre><code class="language-bash">npm run docs:schema &amp;&amp; grep -c &quot;CREATE TABLE&quot; docs/architecture/schema.sql
+</code></pre>
+<p><strong>اگر خواستید از صفر شروع کنید:</strong></p>
+<pre><code class="language-bash">rm -rf .pgdata
+npm run db:migrate &amp;&amp; npm run db:seed
+</code></pre>
+<hr>
+<h2 id="ra-گام-6-api-را-روشن-کنید">گام 6. API را روشن کنید</h2>
+<p><strong>چه کاری:</strong> سرور را روی پورت ۴۰۰۰ بالا بیاورید (ترمینال ۱).</p>
+<ol>
+<li>پورت را تنظیم کنید:</li>
+</ol>
+<pre><code class="language-bash">export PORT=4000
+</code></pre>
+<ol start="2">
+<li>حالت توسعه (ری‌استارت خودکار) را اجرا کنید:</li>
+</ol>
+<pre><code class="language-bash">npm run dev:api
+</code></pre>
+<p>خروجی واقعی (خلاصه لاگ بالا آمدن):</p>
+<pre><code>[Database] PGlite (./.pgdata) — مناسب توسعه و تست
+[NestApplication] Nest application successfully started
+[Bootstrap] API روی http://0.0.0.0:4000/api/v1 (درایور: pglite)
+</code></pre>
+<p>اگر خواستید مثل تولید اجرا کنید، به‌جای حالت توسعه:</p>
+<pre><code class="language-bash">npm run build:api
+PORT=4000 node apps/api/dist/main.js
+</code></pre>
+<p><strong>نقطه بررسی:</strong> ترمینال را باز نگذارید؛ یک ترمینال دیگر باز کنید و گام ۷ را
+بزنید.</p>
+<hr>
+<h2 id="ra-گام-7-سلامت-api-و-ورود-را-آزمون-کنید">گام 7. سلامت API و ورود را آزمون کنید</h2>
+<p><strong>چه کاری:</strong> سه آزمون کوتاه که نشان می‌دهد API زنده، پایگاه داده وصل و ورود
+کار می‌کند.</p>
+<ol>
+<li>سلامت:</li>
+</ol>
+<pre><code class="language-bash">curl -s http://127.0.0.1:4000/api/v1/health
+</code></pre>
+<pre><code class="language-json">{&quot;status&quot;:&quot;ok&quot;,&quot;service&quot;:&quot;farm-api&quot;,&quot;time&quot;:&quot;2026-10-24T05:19:24.192Z&quot;}
+</code></pre>
+<ol start="2">
+<li>ورود و گرفتن توکن:</li>
+</ol>
+<pre><code class="language-bash">TOKEN=$(curl -s -X POST http://127.0.0.1:4000/api/v1/auth/login \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{&quot;email&quot;:&quot;owner@farm.ir&quot;,&quot;password&quot;:&quot;Secret1234&quot;}&#39; | python3 -c &quot;import sys,json;print(json.load(sys.stdin)[&#39;accessToken&#39;])&quot;)
+echo &quot;${TOKEN:0:20}…&quot;
+curl -s -H &quot;Authorization: Bearer $TOKEN&quot; http://127.0.0.1:4000/api/v1/farm
+</code></pre>
+<ol start="3">
+<li><p>سند تعاملی API را در مرورگر باز کنید: <code>http://localhost:4000/api/docs</code>
+(نسخه JSON خام: <code>/api/docs-json</code>).</p>
+</li>
+<li><p>نگهبان نرخ را ببینید (شش تلاش پشت‌سرهم با رمز غلط):</p>
+</li>
+</ol>
+<pre><code class="language-bash">for i in 1 2 3 4 5 6; do
+  curl -s -o /dev/null -w &quot;%{http_code} &quot; -X POST http://127.0.0.1:4000/api/v1/auth/login \
+    -H &quot;Content-Type: application/json&quot; -d &#39;{&quot;email&quot;:&quot;ghost@farm.ir&quot;,&quot;password&quot;:&quot;WrongPass1&quot;}&#39;
+done; echo
+</code></pre>
+<p>خروجی واقعی: <code>401 401 401 401 401 429</code> — تلاش ششم با سقف نرخ بسته می‌شود و هدر
+<code>Retry-After</code> برمی‌گردد. برای آزمون دستی بعدی، سرور را ری‌استارت کنید یا
+<code>RATE_LIMIT_DISABLED=1</code> بدهید.</p>
+<hr>
+<h2 id="ra-گام-8-داشبورد-وب-را-روشن-کنید">گام 8. داشبورد وب را روشن کنید</h2>
+<p><strong>چه کاری:</strong> رابط کاربری را روی پورت ۵۱۷۳ بالا بیاورید (ترمینال ۲).</p>
+<pre><code class="language-bash">cd Farm01/platform
+VITE_API_TARGET=http://127.0.0.1:4000 npm run dev:web
+</code></pre>
+<p>خروجی واقعی:</p>
+<pre><code>VITE v6.4.5  ready in 144 ms
+➜  Local:   http://localhost:5173/
+</code></pre>
+<ol>
+<li>مرورگر را باز کنید: <code>http://localhost:5173</code></li>
+<li>با <code>owner@farm.ir</code> و رمز <code>Secret1234</code> وارد شوید.</li>
+<li>در داشبورد باید چهار KPI و سه نمودار با داده واقعی ببینید.</li>
+</ol>
+<p>نکته‌ای که باید بدانید: مرورگر <strong>هرگز</strong> به <code>localhost:4000</code> درخواست نمی‌زند؛
+همه مسیرها نسبی (<code>/api/v1</code>) هستند و Vite آن‌ها را پروکسی می‌کند. به همین دلیل
+نه CORS لازم است، نه آدرس API داخل باندل سخت می‌شود. اگر API روی پورت دیگری
+است، همان را در <code>VITE_API_TARGET</code> بگذارید.</p>
+<hr>
+<h2 id="ra-گام-9-سرویس-تحلیل-را-روشن-کنید-اختیاری-ولی-ارزشمند">گام 9. سرویس تحلیل را روشن کنید (اختیاری ولی ارزشمند)</h2>
+<p><strong>چه کاری:</strong> سرویس FastAPI را روی پورت ۸۰۰۰ بالا بیاورید (ترمینال ۳).</p>
+<ol>
+<li>محیط پایتون را بسازید و بسته‌ها را نصب کنید:</li>
+</ol>
+<pre><code class="language-bash">cd services/ai
+python3 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
+</code></pre>
+<ol start="2">
+<li>سرویس را اجرا کنید:</li>
+</ol>
+<pre><code class="language-bash">./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+</code></pre>
+<ol start="3">
+<li>سلامت آن را ببینید:</li>
+</ol>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8000/health
+</code></pre>
+<pre><code class="language-json">{&quot;status&quot;:&quot;ok&quot;,&quot;service&quot;:&quot;farm-ai&quot;,&quot;version&quot;:&quot;0.2.0&quot;,
+ &quot;models&quot;:[&quot;gompertz-growth&quot;,&quot;breed-curves&quot;,&quot;disease-rules&quot;,&quot;early-warning-trends&quot;,
+           &quot;loading-optimizer&quot;,&quot;feed-forecast&quot;,&quot;speech-to-text(off)&quot;]}
+</code></pre>
+<ol start="4">
+<li>API را با آدرس این سرویس اجرا کنید: <code>AI_URL=http://127.0.0.1:8000</code> (گام ۶).</li>
+</ol>
+<p><strong>نقطه بررسی — API واقعاً از سرویس استفاده می‌کند:</strong></p>
+<pre><code class="language-bash">curl -s -H &quot;Authorization: Bearer $TOKEN&quot; http://127.0.0.1:4000/api/v1/ai/status
+</code></pre>
+<pre><code class="language-json">{&quot;enabled&quot;:true,&quot;available&quot;:true,&quot;url&quot;:&quot;http://127.0.0.1:8000&quot;,&quot;latencyMs&quot;:39,
+ &quot;models&quot;:[&quot;gompertz-growth&quot;, &quot;...&quot;],&quot;checkedAt&quot;:&quot;2026-10-24T05:25:07.092Z&quot;}
+</code></pre>
+<p>و پیش‌بینی یک گله:</p>
+<pre><code class="language-bash">curl -s -H &quot;Authorization: Bearer $TOKEN&quot; \
+  http://127.0.0.1:4000/api/v1/ai/flocks/&lt;flockId&gt;/forecast | head -c 200
+</code></pre>
+<pre><code class="language-json">{&quot;source&quot;:&quot;ai&quot;,&quot;fallback&quot;:false,&quot;projectedWeightGr&quot;:2306,&quot;targetWeightGr&quot;:2450,&quot;confidence&quot;:0.95,&quot;method&quot;:&quot;gompertz-fit&quot;}
+</code></pre>
+<hr>
+<h2 id="ra-گام-10-رفتار-بدون-سرویس-تحلیل-را-بیازمایید">گام 10. رفتار بدون سرویس تحلیل را بیازمایید</h2>
+<p><strong>چه کاری:</strong> سرویس را خاموش کنید و ببینید سیستم نمی‌شکند.</p>
+<ol>
+<li>در ترمینال سرویس تحلیل <code>Ctrl+C</code> بزنید.</li>
+<li>همان درخواست پیش‌بینی گام ۹ را دوباره بزنید.</li>
+<li>پاسخ باید <code>source: &quot;local&quot;</code> و <code>fallback: true</code> بدهد و <strong>هیچ خطایی</strong> به کاربر
+نشان داده نشود.</li>
+</ol>
+<p>این تفاوت «هوش مصنوعی به‌عنوان بهبود» با «هوش مصنوعی به‌عنوان تکیه‌گاه» است:
+نبودِ سرویس، داده‌های ثبت‌شده را هرگز قفل نمی‌کند.</p>
+<hr>
+<h2 id="ra-گام-11-اپ-موبایل-را-اجرا-کنید">گام 11. اپ موبایل را اجرا کنید</h2>
+<p><strong>چه کاری:</strong> سرور Expo را بالا بیاورید و اپ را روی گوشی یا شبیه‌ساز باز کنید.</p>
+<ol>
+<li>اگر بسته دامنه را نساخته‌اید، بسازید:</li>
+</ol>
+<pre><code class="language-bash">npm run build:domain
+</code></pre>
+<ol start="2">
+<li>نوع‌ها را بدون نیاز به گوشی بررسی کنید:</li>
+</ol>
+<pre><code class="language-bash">npm run typecheck:mobile
+</code></pre>
+<ol start="3">
+<li>سرور Expo را اجرا کنید:</li>
+</ol>
+<pre><code class="language-bash">npm run start:mobile
+</code></pre>
+<ol start="4">
+<li>یکی از این سه راه را انتخاب کنید:</li>
+</ol>
+<ul>
+<li>گوشی واقعی: اپ <strong>Expo Go</strong> را نصب کنید و QR را اسکن کنید.</li>
+<li>اندروید امولاتور: کلید <code>a</code> در ترمینال Expo.</li>
+<li>iOS (فقط macOS): کلید <code>i</code>.</li>
+</ul>
+<ol start="5">
+<li>آدرس API را در <code>apps/mobile/app.json</code> تنظیم کنید:</li>
+</ol>
+<pre><code class="language-json">&quot;extra&quot;: { &quot;apiUrl&quot;: &quot;http://192.168.1.20:4000&quot;, &quot;aiUrl&quot;: &quot;http://192.168.1.20:8000&quot; }
+</code></pre>
+<p><code>localhost</code> روی گوشی به خودِ گوشی اشاره می‌کند، نه رایانه؛ IP رایانه در شبکه
+محلی را بگذارید و مطمئن شوید هر دو روی یک Wi-Fi هستند.</p>
+<hr>
+<h2 id="ra-گام-12-آفلاین-بودن-موبایل-را-بیازمایید">گام 12. آفلاین بودن موبایل را بیازمایید</h2>
+<p><strong>چه کاری:</strong> مهم‌ترین ویژگی این اپ را با چهار حرکت ساده بسنجید.</p>
+<ol>
+<li>وارد شوید و یک ثبت روزانه بزنید؛ باید بدون اینترنت هم ذخیره شود.</li>
+<li>Wi-Fi یا داده را قطع کنید و چند ثبت دیگر بزنید؛ هیچ دکمه‌ای نباید غیرفعال شود.</li>
+<li>اینترنت را وصل کنید؛ صف به‌طور خودکار ارسال می‌شود.</li>
+<li>همان ثبت را دوباره بفرستید (سناریوی قطع وسط ارسال)؛ پاسخ باید
+<code>&quot;status&quot;: &quot;duplicate&quot;</code> باشد، نه یک ردیف دوم.</li>
+</ol>
+<p>آزمون سمت سرور، بدون گوشی:</p>
+<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:4000/api/v1/sync/push \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{&quot;operations&quot;:[{&quot;clientId&quot;:&quot;test-op-0001&quot;,&quot;type&quot;:&quot;daily_log&quot;,&quot;flockId&quot;:&quot;&lt;flockId&gt;&quot;,&quot;payload&quot;:{&quot;date&quot;:&quot;2026-10-20&quot;,&quot;mortality&quot;:3,&quot;feedKg&quot;:120}}]}&#39;
+</code></pre>
+<p>ارسال دوباره‌ی همان بدنه، <code>duplicate</code> می‌دهد.</p>
+<hr>
+<h2 id="ra-گام-13-آزمون‌ها-و-کیفیت-کد-را-اجرا-کنید">گام 13. آزمون‌ها و کیفیت کد را اجرا کنید</h2>
+<p><strong>چه کاری:</strong> چهار فرمان، چهار لایه بررسی.</p>
+<ol>
+<li>نوع‌ها:</li>
+</ol>
+<pre><code class="language-bash">npm run typecheck
+</code></pre>
+<ol start="2">
+<li>قواعد امنیتی (RBAC، هش رمز، اعتبارسنجی ورودی) روی درخت کد:</li>
+</ol>
+<pre><code class="language-bash">npm run check:security
+</code></pre>
+<ol start="3">
+<li>آزمون‌ها:</li>
+</ol>
+<pre><code class="language-bash">npm test
+</code></pre>
+<ol start="4">
+<li>آزمون سرویس تحلیل:</li>
+</ol>
+<pre><code class="language-bash">npm run test:ai
+</code></pre>
+<p>خروجی واقعی:</p>
+<pre><code>✓ قواعد امنیتی برقرار است — 17 کنترلر، 74 مسیر، 2 استثنای مستند.
+# tests 99   # pass 99   # fail 0
+# tests 114  # pass 114  # fail 0
+Tests  22 passed (22)
+23 passed
+</code></pre>
+<p>آزمون API روی <strong>PGlite در حافظه</strong> اجرا می‌شود؛ پس به پایگاه داده بیرونی نیاز
+ندارد و در CI هم سبز است.</p>
+<p>برای این‌که ببینید نگهبان امنیتی واقعاً کار می‌کند (نه فقط سبز است)، یک <code>@Roles</code>
+را از یک مسیر بردارید: <code>npm run check:security</code> می‌شکند و نام همان مسیر را چاپ
+می‌کند.</p>
+<hr>
+<h2 id="ra-گام-14-مستندات-را-بسازید">گام 14. مستندات را بسازید</h2>
+<p><strong>چه کاری:</strong> DDL، مشخصات OpenAPI و یک فایل HTML خودبسنده تولید کنید.</p>
+<ol>
+<li>DDL را از پایگاه داده بگیرید:</li>
+</ol>
+<pre><code class="language-bash">npm run docs:schema
+</code></pre>
+<ol start="2">
+<li>مشخصات API را از سرور در حال اجرا بگیرید (API باید روشن باشد):</li>
+</ol>
+<pre><code class="language-bash">API_URL=http://127.0.0.1:4000 npm run docs:openapi
+</code></pre>
+<ol start="3">
+<li>فایل HTML یکجا را بسازید:</li>
+</ol>
+<pre><code class="language-bash">npm run docs:html
+</code></pre>
+<p>خروجی واقعی:</p>
+<pre><code>جدول‌ها: 16 · خطوط: 130
+openapi.yaml نوشته شد — 54 مسیر، 29 schema
+farm-architecture.html نوشته شد — 560 کیلوبایت
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>فایل</th>
+<th>چیست</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>docs/architecture/README.md</code></td>
+<td>سند معماری هشت‌بخشی (دستی نوشته می‌شود)</td>
+</tr>
+<tr>
+<td><code>docs/architecture/schema.sql</code></td>
+<td>DDL واقعی، تولیدشده</td>
+</tr>
+<tr>
+<td><code>docs/architecture/openapi.yaml</code></td>
+<td>مشخصات API، تولیدشده از سرور در حال اجرا</td>
+</tr>
+<tr>
+<td><code>docs/architecture/farm-architecture.html</code></td>
+<td>همه‌ی بالا در یک فایل، با فونت و تصویر درون‌فایل</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="ra-گام-15-نسخه-pdf-همین-راهنما-را-بسازید">گام 15. نسخه PDF همین راهنما را بسازید</h2>
+<p><strong>چه کاری:</strong> از همین سند یک PDF فارسی و راست‌به‌چپ بگیرید.</p>
+<pre><code class="language-bash">npm run docs:pdf
+</code></pre>
+<p>خروجی واقعی:</p>
+<pre><code>✓ RUNBOOK.pdf نوشته شد — 14 صفحه، 84 کیلوبایت
+</code></pre>
+<p>فایل در <code>docs/RUNBOOK.pdf</code> است. اگر فونت شکسته چاپ شد، یعنی بسته <code>vazirmatn</code>
+نصب نیست؛ گام ۲ را تکرار کنید.</p>
+<hr>
+<h2 id="ra-گام-16-با-docker-compose-مستقر-کنید">گام 16. با Docker Compose مستقر کنید</h2>
+<p><strong>چه کاری:</strong> همه اجزا را با Postgres و Redis واقعی بالا بیاورید.</p>
+<ol>
+<li>به پوشه پلتفرم بروید و دو متغیر الزامی را صادر کنید:</li>
+</ol>
+<pre><code class="language-bash">cd platform
+export JWT_SECRET=$(openssl rand -hex 32)
+export CORS_ORIGINS=https://app.example.com
+</code></pre>
+<ol start="2">
+<li>سرویس‌ها را بسازید و اجرا کنید:</li>
+</ol>
+<pre><code class="language-bash">docker compose up -d --build
+</code></pre>
+<ol start="3">
+<li>وضعیت را ببینید:</li>
+</ol>
+<pre><code class="language-bash">docker compose ps
+</code></pre>
+<p>ترتیب بالا آمدن: <code>postgres</code> (با healthcheck) → <code>redis</code> → <code>api</code> (مهاجرت‌ها را
+خودکار اجرا می‌کند) → <code>ai</code>.</p>
+<ol start="4">
+<li>سلامت و لاگ را ببینید:</li>
+</ol>
+<pre><code class="language-bash">curl -s http://127.0.0.1:4000/api/v1/health
+docker compose logs -f api
+</code></pre>
+<p><strong>قفل ایمنی تولید:</strong> اگر <code>JWT_SECRET</code> نمونه یا کوتاه باشد، یا <code>CORS_ORIGINS</code>
+باز باشد، برنامه به‌جای بالا آمدن ناامن، همان لحظه می‌شکند:</p>
+<pre><code>Error: پیکربندی ناامن برای تولید:
+- JWT_SECRET تنظیم نشده یا کوتاه است (حداقل 32 نویسه).
+- CORS_ORIGINS در تولید باید فهرست دقیق دامنه‌ها باشد، نه خالی و نه *.
+</code></pre>
+<p>این پیام خطا نیست که دور بزنید؛ چک‌لیست تنظیمات است.</p>
+<hr>
+<h2 id="ra-گام-17-چک‌لیست-نهایی-پیش-از-دمو-را-بزنید">گام 17. چک‌لیست نهایی پیش از دمو را بزنید</h2>
+<p><strong>چه کاری:</strong> هفت بررسی سریع، پیش از نشان دادن سیستم.</p>
+<ul>
+<li><input disabled="" type="checkbox"> <code>curl http://127.0.0.1:4000/api/v1/health</code> پاسخ <code>{&quot;status&quot;:&quot;ok&quot;, ...}</code> می‌دهد</li>
+<li><input disabled="" type="checkbox"> ورود <code>owner@farm.ir</code> / <code>Secret1234</code> در <code>http://localhost:5173</code> انجام می‌شود</li>
+<li><input disabled="" type="checkbox"> داشبورد چهار KPI و سه نمودار با داده واقعی نشان می‌دهد</li>
+<li><input disabled="" type="checkbox"> <code>http://localhost:4000/api/docs</code> باز می‌شود</li>
+<li><input disabled="" type="checkbox"> <code>npm test</code> سبز است (۹۹ + ۱۱۴ + ۲۲)</li>
+<li><input disabled="" type="checkbox"> <code>npm run check:security</code> سبز است</li>
+<li><input disabled="" type="checkbox"> با خاموش‌بودن سرویس تحلیل، پیش‌بینی همچنان جواب می‌دهد (<code>fallback: true</code>)</li>
+</ul>
+<hr>
+<h2 id="ra-گام-18-خاموش‌کردن-و-تمیزکاری">گام 18. خاموش‌کردن و تمیزکاری</h2>
+<p><strong>چه کاری:</strong> سرورها را ببندید و اگر لازم شد، داده توسعه را پاک کنید.</p>
+<ol>
+<li>سرورهای محلی را ببندید:</li>
+</ol>
+<pre><code class="language-bash">lsof -ti:4000,5173,8000 | xargs -r kill
+</code></pre>
+<ol start="2">
+<li>داده توسعه را پاک کنید:</li>
+</ol>
+<pre><code class="language-bash">rm -rf .pgdata
+</code></pre>
+<ol start="3">
+<li>خروجی‌های ساخت را پاک کنید:</li>
+</ol>
+<pre><code class="language-bash">rm -rf apps/api/dist apps/api/dist-test packages/domain/dist apps/web/dist
+</code></pre>
+<ol start="4">
+<li>اگر Docker استفاده کردید:</li>
+</ol>
+<pre><code class="language-bash">docker compose down        # داده‌ها می‌مانند
+docker compose down -v     # داده‌ها هم پاک می‌شوند
+</code></pre>
+<hr>
+<h2 id="ra-پیوست-الف-نقشه-اجزا-و-پورت‌ها">پیوست الف — نقشه اجزا و پورت‌ها</h2>
 <table>
 <thead>
 <tr>
@@ -3359,74 +3835,15 @@ components:
 <td>FastAPI؛ اختیاری، نبودش API را نمی‌شکند</td>
 </tr>
 </tbody></table>
-<p>نکته‌ی کلیدی معماری: <strong>فقط API به پایگاه داده دسترسی دارد.</strong> وب و موبایل هیچ
-اتصال مستقیمی ندارند؛ وب از مسیر نسبی <code>/api/v1</code> (پروکسی Vite) و موبایل از
+<p>نکته معماری: <strong>فقط API به پایگاه داده دسترسی دارد.</strong> وب و موبایل هیچ اتصال
+مستقیمی ندارند؛ وب از مسیر نسبی <code>/api/v1</code> (پروکسی Vite) و موبایل از
 <code>expo.extra.apiUrl</code> استفاده می‌کند.</p>
 <hr>
-<h2 id="ra-۱-پیش‌نیازها">۱. پیش‌نیازها</h2>
-<table>
-<thead>
-<tr>
-<th>ابزار</th>
-<th>نسخه لازم</th>
-<th>بررسی</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Node.js</td>
-<td>≥ ۲۰ (با ۲۲ آزموده شده)</td>
-<td><code>node -v</code></td>
-</tr>
-<tr>
-<td>npm</td>
-<td>≥ ۱۰</td>
-<td><code>npm -v</code></td>
-</tr>
-<tr>
-<td>Python</td>
-<td>≥ ۳٫۱۰ (با ۳٫۱۱ آزموده شده)</td>
-<td><code>python3 --version</code></td>
-</tr>
-<tr>
-<td>Docker</td>
-<td>اختیاری، فقط برای استقرار</td>
-<td><code>docker compose version</code></td>
-</tr>
-</tbody></table>
-<p>بررسی یک‌جا:</p>
-<pre><code class="language-bash">node -v &amp;&amp; npm -v &amp;&amp; python3 --version
-</code></pre>
-<p>خروجی واقعی محیط آزموده‌شده:</p>
-<pre><code>v22.22.3
-10.9.8
-Python 3.11.2
-</code></pre>
-<p>✅ <strong>نقطه بررسی:</strong> هر سه عدد چاپ شدند. اگر <code>node -v</code> کمتر از ۲۰ بود، ادامه
-ندهید؛ برخی وابستگی‌ها (NestJS 11، Vite 6) روی نسخه‌های قدیمی بالا نمی‌آیند.</p>
-<hr>
-<h2 id="ra-۲-گرفتن-کد-و-نصب-وابستگی‌ها">۲. گرفتن کد و نصب وابستگی‌ها</h2>
-<pre><code class="language-bash">git clone &lt;آدرس-مخزن&gt; Farm01
-cd Farm01/platform
-npm ci
-</code></pre>
-<p><code>npm ci</code> به‌جای <code>npm install</code> استفاده می‌شود تا <strong>دقیقاً</strong> همان نسخه‌های
-<code>package-lock.json</code> نصب شوند (قابل تکرار در CI و روی ماشین همکار).</p>
-<p>خروجی واقعی: نصب کامل در حدود <strong>۲۳ ثانیه</strong> (۹۲۶ بسته، شامل ورک‌اسپیس‌های
-<code>apps/*</code> و <code>packages/*</code>).</p>
-<p>اگر <code>npm ci</code> در دسترس نبود:</p>
-<pre><code class="language-bash">npm install --no-audit --no-fund
-</code></pre>
-<p>✅ <strong>نقطه بررسی:</strong></p>
-<pre><code class="language-bash">ls node_modules/.bin | grep -c vite      # ≥ ۱
-ls node_modules/vazirmatn/fonts/ttf/Vazirmatn-Regular.ttf
-</code></pre>
-<p>اگر فونت چاپ نشد، بسته <code>vazirmatn</code> نصب نشده و گزارش PDF فارسی بی‌ریخت می‌شود.</p>
-<hr>
-<h2 id="ra-۳-متغیرهای-محیطی">۳. متغیرهای محیطی</h2>
-<p>یک فایل <code>.env</code> از نمونه بسازید و مقادیر را ببینید:</p>
+<h2 id="ra-پیوست-ب-متغیرهای-محیطی">پیوست ب — متغیرهای محیطی</h2>
+<p>یک فایل <code>.env</code> از نمونه بسازید:</p>
 <pre><code class="language-bash">cp .env.example .env
 </code></pre>
-<p>برای <strong>توسعه محلی</strong> تقریباً همه‌چیز پیش‌فرض درست است. فقط این‌ها اهمیت دارند:</p>
+<p>برای توسعه محلی تقریباً همه پیش‌فرض‌ها درست‌اند. فقط این‌ها اهمیت دارند:</p>
 <table>
 <thead>
 <tr>
@@ -3443,7 +3860,7 @@ ls node_modules/vazirmatn/fonts/ttf/Vazirmatn-Regular.ttf
 <tr>
 <td><code>PG_DRIVER</code></td>
 <td><code>postgres</code> در <code>.env.example</code></td>
-<td>برای توسعه بدون Postgres، <code>PGLITE_DATA_DIR</code> را تنظیم کنید (پایین)</td>
+<td>برای توسعه بدون Postgres، <code>PGLITE_DATA_DIR</code> را تنظیم کنید</td>
 </tr>
 <tr>
 <td><code>DATABASE_URL</code></td>
@@ -3481,260 +3898,10 @@ ls node_modules/vazirmatn/fonts/ttf/Vazirmatn-Regular.ttf
 <td>سقف کلی هر نشانی در دقیقه</td>
 </tr>
 </tbody></table>
-<p>نکته‌ی مهم: <code>.env</code> <strong>خودکار</strong> خوانده نمی‌شود؛ <code>ConfigModule</code> فایل <code>.env</code> را از
-ریشه‌ی اجرا می‌خواند. ساده‌ترین راه، صادرکردن متغیرها در همان ترمینال است
-(همان کاری که در قدم‌های بعد می‌کنیم) یا استفاده از Docker Compose (قدم ۱۲).</p>
-<p>⚠️ اگر <code>.env.example</code> را عیناً کپی کردید، <code>PG_DRIVER=postgres</code> فعال است و به
-یک Postgres واقعی نیاز دارید. برای توسعه‌ی سریع بدون نصب Postgres، آن خط را
-کامنت کنید و <code>PGLITE_DATA_DIR</code> بدهید — دقیقاً مثل قدم ۴.</p>
+<p><code>.env</code> خودکار خوانده نمی‌شود؛ ساده‌ترین راه، صادرکردن متغیرها در همان ترمینال
+است (همان کاری که در گام‌ها کردیم) یا استفاده از Docker Compose (گام ۱۶).</p>
 <hr>
-<h2 id="ra-۴-ساخت-بسته-دامنه-پیش‌نیاز-پنهان">۴. ساخت بسته دامنه (پیش‌نیاز پنهان)</h2>
-<p>API و وب، <code>@farm/domain</code> را از <strong>خروجی ساخته‌شده</strong> می‌خوانند، نه از سورس. اگر
-این قدم را رد کنید، خطای <code>Cannot find module &#39;@farm/domain&#39;</code> می‌گیرید:</p>
-<pre><code class="language-bash">npm run build:domain
-</code></pre>
-<p>خروجی واقعی: حدود <strong>۲ ثانیه</strong>، بدون پیام اضافه.</p>
-<p>✅ <strong>نقطه بررسی:</strong></p>
-<pre><code class="language-bash">ls packages/domain/dist/index.js &amp;&amp; node -e &quot;console.log(Object.keys(require(&#39;./packages/domain/dist&#39;)).length, &#39;export&#39;)&quot;
-</code></pre>
-<hr>
-<h2 id="ra-۵-پایگاه-داده-مهاجرت-و-داده-نمونه">۵. پایگاه داده: مهاجرت و داده نمونه</h2>
-<h3 id="ra-گزینه-الف-pglite-توسعه-و-آزمون-بدون-نصب-چیزی">گزینه الف) PGlite — توسعه و آزمون، بدون نصب چیزی</h3>
-<p>PGlite همان PostgreSQL است که به WASM کامپایل شده؛ همان <code>numeric</code>، همان
-<code>timestamptz</code>، همان ایندکس یکتا و <code>ON CONFLICT</code>. فقط یک نویسنده درون فرایند
-دارد و برای تولید مناسب نیست.</p>
-<pre><code class="language-bash">export PGLITE_DATA_DIR=./.pgdata      # memory:// هم می‌شود؛ ولی با ری‌استارت پاک می‌شود
-npm run db:migrate
-</code></pre>
-<p>خروجی واقعی:</p>
-<pre><code>[Database] PGlite (./.pgdata) — مناسب توسعه و تست
-مهاجرت‌های اجراشده: 0001_init.sql, 0002_model_v2.sql, 0003_operations.sql, 0004_alert_thresholds.sql
-</code></pre>
-<p>مهاجرت‌ها <strong>بی‌اثر تکرارپذیر</strong> (idempotent) هستند و در جدول <code>_migrations</code>
-ثبت می‌شوند؛ اجرای دوباره چیزی را خراب نمی‌کند:</p>
-<pre><code class="language-bash">npm run db:migrate      # بار دوم: «مهاجرت جدیدی نبود.»
-</code></pre>
-<p>سپس داده نمونه (یک مزرعه، دو سالن، گله فعال ۱۲٬۰۰۰ قطعه‌ای با ۲۸ روز ثبت):</p>
-<pre><code class="language-bash">npm run db:seed
-</code></pre>
-<p>خروجی واقعی:</p>
-<pre><code>[Seed] داده نمونه ساخته شد: owner@farm.ir / Secret1234 (امروز 2026-10-24)
-</code></pre>
-<h3 id="ra-گزینه-ب-postgresql-واقعی">گزینه ب) PostgreSQL واقعی</h3>
-<pre><code class="language-bash">docker compose up -d postgres
-export PG_DRIVER=postgres
-export DATABASE_URL=postgres://farm:farm@localhost:5432/farm
-npm run db:migrate &amp;&amp; npm run db:seed
-</code></pre>
-<h3 id="ra-بازنشانی-کامل-داده-شروع-از-صفر">بازنشانی کامل داده (شروع از صفر)</h3>
-<pre><code class="language-bash">rm -rf .pgdata          # PGlite: فقط پوشه داده
-npm run db:migrate &amp;&amp; npm run db:seed
-</code></pre>
-<p>برای Postgres: <code>docker compose down -v</code> حجم داده را پاک می‌کند.</p>
-<p>✅ <strong>نقطه بررسی:</strong> دستور زیر باید ۱۵ جدول دامنه + جدول فنی را نشان دهد:</p>
-<pre><code class="language-bash">npm run docs:schema &amp;&amp; grep -c &quot;CREATE TABLE&quot; docs/architecture/schema.sql
-</code></pre>
-<hr>
-<h2 id="ra-۶-اجرای-api">۶. اجرای API</h2>
-<h3 id="ra-حالت-توسعه-ری‌استارت-خودکار">حالت توسعه (ری‌استارت خودکار)</h3>
-<pre><code class="language-bash">export PORT=4000
-npm run dev:api
-</code></pre>
-<h3 id="ra-حالت-تولیدمانند-بیلد-اجرا">حالت تولیدمانند (بیلد + اجرا)</h3>
-<pre><code class="language-bash">npm run build:api
-PORT=4000 node apps/api/dist/main.js
-</code></pre>
-<p>خروجی واقعی (خلاصه‌ی لاگ بالا آمدن):</p>
-<pre><code>[Database] PGlite (./.pgdata) — مناسب توسعه و تست
-[NestApplication] Nest application successfully started
-[Bootstrap] API روی http://0.0.0.0:4000/api/v1 (درایور: pglite)
-</code></pre>
-<p>✅ <strong>نقطه بررسی ۱ — سلامت:</strong></p>
-<pre><code class="language-bash">curl -s http://127.0.0.1:4000/api/v1/health
-</code></pre>
-<pre><code class="language-json">{&quot;status&quot;:&quot;ok&quot;,&quot;service&quot;:&quot;farm-api&quot;,&quot;time&quot;:&quot;2026-10-24T05:19:24.192Z&quot;}
-</code></pre>
-<p>✅ <strong>نقطه بررسی ۲ — ورود و توکن:</strong></p>
-<pre><code class="language-bash">TOKEN=$(curl -s -X POST http://127.0.0.1:4000/api/v1/auth/login \
-  -H &quot;Content-Type: application/json&quot; \
-  -d &#39;{&quot;email&quot;:&quot;owner@farm.ir&quot;,&quot;password&quot;:&quot;Secret1234&quot;}&#39; | python3 -c &quot;import sys,json;print(json.load(sys.stdin)[&#39;accessToken&#39;])&quot;)
-echo &quot;${TOKEN:0:20}…&quot;
-curl -s -H &quot;Authorization: Bearer $TOKEN&quot; http://127.0.0.1:4000/api/v1/farm
-</code></pre>
-<p>✅ <strong>نقطه بررسی ۳ — سند تعاملی API:</strong> مرورگر → <code>http://localhost:4000/api/docs</code>
-(JSON خام: <code>/api/docs-json</code>).</p>
-<p>✅ <strong>نقطه بررسی ۴ — نگهبان امنیتی زنده است:</strong></p>
-<pre><code class="language-bash">for i in 1 2 3 4 5 6; do
-  curl -s -o /dev/null -w &quot;%{http_code} &quot; -X POST http://127.0.0.1:4000/api/v1/auth/login \
-    -H &quot;Content-Type: application/json&quot; -d &#39;{&quot;email&quot;:&quot;ghost@farm.ir&quot;,&quot;password&quot;:&quot;WrongPass1&quot;}&#39;
-done; echo
-</code></pre>
-<p>خروجی واقعی: <code>401 401 401 401 401 429</code> — تلاش ششم با سقف نرخ بسته می‌شود و
-هدر <code>Retry-After: 300</code> برمی‌گردد. برای آزمون دستی بعدی، سرور را ری‌استارت کنید
-یا <code>RATE_LIMIT_DISABLED=1</code> بدهید.</p>
-<hr>
-<h2 id="ra-۷-اجرای-داشبورد-وب">۷. اجرای داشبورد وب</h2>
-<p>در ترمینال دوم (API باید بالا باشد):</p>
-<pre><code class="language-bash">cd Farm01/platform
-VITE_API_TARGET=http://127.0.0.1:4000 npm run dev:web
-</code></pre>
-<p>خروجی واقعی:</p>
-<pre><code>VITE v6.4.5  ready in 144 ms
-➜  Local:   http://localhost:5173/
-➜  Network: http://169.254.0.21:5173/
-</code></pre>
-<p>مرورگر → <code>http://localhost:5173</code> و ورود با <code>owner@farm.ir</code> / <code>Secret1234</code>.</p>
-<p>نکته‌های این قدم:</p>
-<ul>
-<li>مرورگر <strong>هرگز</strong> به <code>localhost:4000</code> درخواست نمی‌زند؛ همه‌چیز نسبی (<code>/api/v1</code>)
-است و Vite پروکسی می‌کند. به همین دلیل نه CORS لازم است، نه آدرس API داخل
-باندل سخت می‌شود.</li>
-<li>اگر API روی پورت دیگری است، همان را در <code>VITE_API_TARGET</code> بگذارید.</li>
-<li>در محیط پیش‌نمایش/سندباکس، دامنه‌های میزبان در <code>server.allowedHosts</code> باز
-هستند؛ در شبکه‌ی بسته اگر صفحه سفید ماند، این کلید و <code>host: &quot;0.0.0.0&quot;</code> را
-بررسی کنید.</li>
-</ul>
-<p>✅ <strong>نقطه بررسی:</strong> ورود انجام می‌شود و داشبورد با چهار KPI می‌آید؛ تب «امروز»
-هم برای نقش‌های دیگر (کارگر/دامپزشک) باز است.</p>
-<hr>
-<h2 id="ra-۸-اجرای-سرویس-تحلیل-اختیاری-ولی-ارزشمند">۸. اجرای سرویس تحلیل (اختیاری ولی ارزشمند)</h2>
-<pre><code class="language-bash">cd services/ai
-python3 -m venv .venv
-./.venv/bin/pip install -r requirements.txt
-./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-</code></pre>
-<p>خروجی واقعی <code>GET /health</code>:</p>
-<pre><code class="language-json">{&quot;status&quot;:&quot;ok&quot;,&quot;service&quot;:&quot;farm-ai&quot;,&quot;version&quot;:&quot;0.2.0&quot;,
- &quot;models&quot;:[&quot;gompertz-growth&quot;,&quot;breed-curves&quot;,&quot;disease-rules&quot;,&quot;early-warning-trends&quot;,
-           &quot;loading-optimizer&quot;,&quot;feed-forecast&quot;,&quot;speech-to-text(off)&quot;]}
-</code></pre>
-<p>سپس API را با آدرس این سرویس بالا بیاورید (<code>AI_URL=http://127.0.0.1:8000</code>).</p>
-<p>✅ <strong>نقطه بررسی — API واقعاً از سرویس استفاده می‌کند:</strong></p>
-<pre><code class="language-bash">curl -s -H &quot;Authorization: Bearer $TOKEN&quot; http://127.0.0.1:4000/api/v1/ai/status
-</code></pre>
-<pre><code class="language-json">{&quot;enabled&quot;:true,&quot;available&quot;:true,&quot;url&quot;:&quot;http://127.0.0.1:8000&quot;,&quot;latencyMs&quot;:39,
- &quot;models&quot;:[&quot;gompertz-growth&quot;, ...],&quot;checkedAt&quot;:&quot;2026-10-24T05:25:07.092Z&quot;}
-</code></pre>
-<p>و پیش‌بینی گله:</p>
-<pre><code class="language-bash">curl -s -H &quot;Authorization: Bearer $TOKEN&quot; \
-  http://127.0.0.1:4000/api/v1/ai/flocks/&lt;flockId&gt;/forecast | head -c 200
-</code></pre>
-<pre><code class="language-json">{&quot;source&quot;:&quot;ai&quot;,&quot;fallback&quot;:false,&quot;projectedWeightGr&quot;:2306,&quot;targetWeightGr&quot;:2450,&quot;confidence&quot;:0.95,&quot;method&quot;:&quot;gompertz-fit&quot;}
-</code></pre>
-<p><strong>آزمون مهم — رفتار بدون سرویس تحلیل:</strong> سرویس را ببندید (Ctrl+C) و همان
-درخواست را تکرار کنید. پاسخ باید <code>source: &quot;local&quot;</code> و <code>fallback: true</code> بدهد و
-<strong>هیچ خطایی</strong> به کاربر نشان داده نشود. این تفاوت «هوش مصنوعی به‌عنوان بهبود» با
-«هوش مصنوعی به‌عنوان تکیه‌گاه» است.</p>
-<hr>
-<h2 id="ra-۹-اجرای-اپ-موبایل-expo">۹. اجرای اپ موبایل (Expo)</h2>
-<pre><code class="language-bash">npm run build:domain          # اگر قبلاً نساخته‌اید
-npm run typecheck:mobile      # بررسی نوع‌ها بدون نیاز به گوشی
-npm run start:mobile          # Expo Dev Server
-</code></pre>
-<p>سپس یکی از این‌ها:</p>
-<ul>
-<li>گوشی واقعی: اپ <strong>Expo Go</strong> را نصب کنید و QR را اسکن کنید.</li>
-<li>اندروید امولاتور: <code>a</code> در ترمینال Expo.</li>
-<li>iOS (فقط macOS): <code>i</code>.</li>
-</ul>
-<p>تنظیم آدرس API در <code>apps/mobile/app.json</code>:</p>
-<pre><code class="language-json">&quot;extra&quot;: { &quot;apiUrl&quot;: &quot;http://192.168.1.20:4000&quot;, &quot;aiUrl&quot;: &quot;http://192.168.1.20:8000&quot; }
-</code></pre>
-<p>⚠️ <code>localhost</code> روی گوشی به خودِ گوشی اشاره می‌کند، نه رایانه. IP رایانه در
-شبکه محلی را بگذارید و مطمئن شوید هر دو یک Wi-Fi هستند. پیش‌فرض فایل روی
-<code>http://localhost:4000</code> است (برای شبیه‌ساز در همان ماشین).</p>
-<p>✅ <strong>نقطه بررسی آفلاین (مهم‌ترین ویژگی این اپ):</strong></p>
-<ol>
-<li>وارد شوید، یک ثبت روزانه بزنید — بدون اینترنت هم باید ذخیره شود.</li>
-<li>Wi-Fi/داده را قطع کنید، چند ثبت دیگر بزنید؛ هیچ دکمه‌ای نباید غیرفعال شود.</li>
-<li>اینترنت را وصل کنید؛ صف خودکار ارسال می‌شود.</li>
-<li>همان ثبت را دوباره بفرستید (سناریوی قطع وسط ارسال): پاسخ باید
-<code>&quot;status&quot;: &quot;duplicate&quot;</code> باشد، نه یک ردیف دوم.</li>
-</ol>
-<p>آزمون سمت سرور، بدون گوشی:</p>
-<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:4000/api/v1/sync/push \
-  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;Content-Type: application/json&quot; \
-  -d &#39;{&quot;operations&quot;:[{&quot;clientId&quot;:&quot;test-op-0001&quot;,&quot;type&quot;:&quot;daily_log&quot;,&quot;flockId&quot;:&quot;&lt;flockId&gt;&quot;,&quot;payload&quot;:{&quot;date&quot;:&quot;2026-10-20&quot;,&quot;mortality&quot;:3,&quot;feedKg&quot;:120}}]}&#39;
-</code></pre>
-<p>ارسال دوباره‌ی همان بدنه، <code>duplicate</code> می‌دهد.</p>
-<hr>
-<h2 id="ra-۱۰-آزمون‌ها-و-کیفیت-کد">۱۰. آزمون‌ها و کیفیت کد</h2>
-<p>سه فرمان، سه لایه:</p>
-<pre><code class="language-bash">npm run typecheck       # strict TypeScript در دامنه، API و وب (≈۹ ثانیه)
-npm run check:security  # قواعد RBAC/هش/اعتبارسنجی روی درخت کد
-npm test                # ۹۹ دامنه + ۱۱۴ API + ۲۲ وب
-npm run test:ai         # ۲۳ آزمون سرویس تحلیل (با venv سرویس)
-</code></pre>
-<p>خروجی واقعی:</p>
-<pre><code>✓ قواعد امنیتی برقرار است — 17 کنترلر، 74 مسیر، 2 استثنای مستند.
-# tests 99   # pass 99   # fail 0
-# tests 114  # pass 114  # fail 0
-Tests  22 passed (22)
-23 passed
-</code></pre>
-<p>آزمون API روی <strong>PGlite در حافظه</strong> اجرا می‌شود، پس به پایگاه داده بیرونی نیاز
-ندارد و در CI هم سبز است.</p>
-<p>برای دیدن این‌که نگهبان امنیتی واقعاً کار می‌کند (نه فقط سبز است): یک <code>@Roles</code>
-را از یک مسیر بردارید، <code>npm run check:security</code> می‌شکند و نام همان مسیر را
-چاپ می‌کند.</p>
-<hr>
-<h2 id="ra-۱۱-مستندات-و-فایل-یکجا">۱۱. مستندات و فایل یکجا</h2>
-<pre><code class="language-bash">npm run docs:schema                  # DDL از پایگاه داده پس از مهاجرت‌ها
-API_URL=http://127.0.0.1:4000 npm run docs:openapi   # از /api/docs-json
-npm run docs:html                    # یک فایل HTML خودبسنده از کل سند
-</code></pre>
-<p>خروجی واقعی:</p>
-<pre><code>جدول‌ها: 16 · خطوط: 130
-openapi.yaml نوشته شد — 54 مسیر، 29 schema
-✓ farm-architecture.html نوشته شد — 560 کیلوبایت
-</code></pre>
-<p>فایل‌های تولیدشده در <code>docs/architecture/</code>:</p>
-<table>
-<thead>
-<tr>
-<th>فایل</th>
-<th>چیست</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>README.md</code></td>
-<td>سند معماری هشت‌بخشی (دستی نوشته می‌شود)</td>
-</tr>
-<tr>
-<td><code>schema.sql</code></td>
-<td>DDL واقعی، تولیدشده</td>
-</tr>
-<tr>
-<td><code>openapi.yaml</code></td>
-<td>مشخصات API، تولیدشده از سرور در حال اجرا</td>
-</tr>
-<tr>
-<td><code>farm-architecture.html</code></td>
-<td>همه‌ی بالا در یک فایل، با فونت و تصویر درون‌فایل</td>
-</tr>
-</tbody></table>
-<hr>
-<h2 id="ra-۱۲-استقرار-با-docker-compose">۱۲. استقرار با Docker Compose</h2>
-<pre><code class="language-bash">cd platform
-export JWT_SECRET=$(openssl rand -hex 32)      # الزامی؛ بدون آن بالا نمی‌آید
-export CORS_ORIGINS=https://app.example.com    # فهرست دقیق، نه *
-docker compose up -d --build
-docker compose ps
-</code></pre>
-<p>چه چیزی بالا می‌آید: <code>postgres</code> (با healthcheck) → <code>redis</code> → <code>api</code> (مهاجرت‌ها را
-خودکار اجرا می‌کند) → <code>ai</code>. سپس:</p>
-<pre><code class="language-bash">curl -s http://127.0.0.1:4000/api/v1/health
-docker compose logs -f api
-</code></pre>
-<p><strong>قفل ایمنی تولید:</strong> اگر <code>JWT_SECRET</code> نمونه/کوتاه باشد یا <code>CORS_ORIGINS</code> باز
-باشد، برنامه به‌جای بالا آمدن ناامن، همان لحظه می‌شکند:</p>
-<pre><code>Error: پیکربندی ناامن برای تولید:
-- JWT_SECRET تنظیم نشده یا کوتاه است (حداقل ۳۲ نویسه).
-- CORS_ORIGINS در تولید باید فهرست دقیق دامنه‌ها باشد، نه خالی و نه *.
-</code></pre>
-<p>این پیام خطا نیست که دور بزنید؛ چک‌لیست تنظیمات است.</p>
-<hr>
-<h2 id="ra-۱۳-عیب‌یابی-خطا-علت-درمان">۱۳. عیب‌یابی — خطا، علت، درمان</h2>
+<h2 id="ra-پیوست-ج-عیب‌یابی-خطا-علت-درمان">پیوست ج — عیب‌یابی: خطا، علت، درمان</h2>
 <table>
 <thead>
 <tr>
@@ -3759,14 +3926,14 @@ docker compose logs -f api
 <td><code>VITE_API_TARGET</code> را درست کنید</td>
 </tr>
 <tr>
-<td><code>SQLITE_BUSY</code>/قفل PGlite</td>
+<td><code>SQLITE_BUSY</code> یا قفل PGlite</td>
 <td>دو فرایند روی یک پوشه <code>PGLITE_DATA_DIR</code></td>
 <td>یکی را ببندید یا پوشه جدا بدهید</td>
 </tr>
 <tr>
 <td><code>پیکربندی ناامن برای تولید</code></td>
 <td><code>NODE_ENV=production</code> با تنظیمات نمونه</td>
-<td><code>JWT_SECRET</code> ≥۳۲ نویسه و <code>CORS_ORIGINS</code> دقیق</td>
+<td><code>JWT_SECRET</code> حداقل ۳۲ نویسه و <code>CORS_ORIGINS</code> دقیق</td>
 </tr>
 <tr>
 <td><code>[Redis] Redis در دسترس نیست</code></td>
@@ -3780,13 +3947,13 @@ docker compose logs -f api
 </tr>
 <tr>
 <td>گزارش PDF با حروف شکسته</td>
-<td>فونت وزیرمتن نصب/بارگیری نشده</td>
+<td>فونت وزیرمتن نصب یا بارگیری نشده</td>
 <td><code>npm ci</code> و وجود <code>node_modules/vazirmatn</code></td>
 </tr>
 <tr>
-<td><code>source: &quot;local&quot;</code> همیشه</td>
+<td>همیشه <code>source: &quot;local&quot;</code></td>
 <td><code>AI_URL</code> اشتباه یا سرویس خاموش</td>
-<td>سرویس تحلیل را بالا بیاورید (قدم ۸) — این رفتار، خطا نیست</td>
+<td>سرویس تحلیل را بالا بیاورید (گام ۹) — این رفتار خطا نیست</td>
 </tr>
 <tr>
 <td>موبایل «خطای شبکه» می‌دهد</td>
@@ -3800,55 +3967,9 @@ docker compose logs -f api
 </tr>
 </tbody></table>
 <hr>
-<h2 id="ra-۱۴-چک‌لیست-از-صفر-تا-دمو-در-۱۰-دقیقه">۱۴. چک‌لیست «از صفر تا دمو» در ۱۰ دقیقه</h2>
-<pre><code class="language-bash"># ۱) نصب (≈۲۵ ثانیه)
-cd Farm01/platform &amp;&amp; npm ci
-
-# ۲) بسته دامنه (≈۲ ثانیه)
-npm run build:domain
-
-# ۳) پایگاه داده (≈۵ ثانیه)
-export PGLITE_DATA_DIR=./.pgdata
-npm run db:migrate &amp;&amp; npm run db:seed
-
-# ۴) API در ترمینال ۱
-npm run dev:api
-
-# ۵) داشبورد در ترمینال ۲
-VITE_API_TARGET=http://127.0.0.1:4000 npm run dev:web
-
-# ۶) سرویس تحلیل (اختیاری) در ترمینال ۳
-cd services/ai &amp;&amp; python3 -m venv .venv &amp;&amp; ./.venv/bin/pip install -r requirements.txt
-./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-</code></pre>
-<ul>
-<li><input disabled="" type="checkbox"> <code>curl http://127.0.0.1:4000/api/v1/health</code> → <code>{&quot;status&quot;:&quot;ok&quot;, ...}</code></li>
-<li><input disabled="" type="checkbox"> ورود <code>owner@farm.ir</code> / <code>Secret1234</code> در <code>http://localhost:5173</code></li>
-<li><input disabled="" type="checkbox"> داشبورد: چهار KPI + سه نمودار با داده واقعی</li>
-<li><input disabled="" type="checkbox"> <code>http://localhost:4000/api/docs</code> باز می‌شود</li>
-<li><input disabled="" type="checkbox"> <code>npm test</code> سبز (۹۹ + ۱۱۴ + ۲۲)</li>
-<li><input disabled="" type="checkbox"> <code>npm run check:security</code> سبز</li>
-<li><input disabled="" type="checkbox"> با خاموش‌کردن سرویس تحلیل، پیش‌بینی همچنان جواب می‌دهد (<code>fallback: true</code>)</li>
-</ul>
-<hr>
-<h2 id="ra-۱۵-تمیزکاری">۱۵. تمیزکاری</h2>
-<pre><code class="language-bash"># بستن سرورهای محلی
-lsof -ti:4000,5173,8000 | xargs -r kill
-
-# پاک‌کردن داده توسعه
-rm -rf .pgdata
-
-# پاک‌کردن خروجی‌های ساخت
-rm -rf apps/api/dist apps/api/dist-test packages/domain/dist apps/web/dist
-
-# اگر Docker استفاده کردید
-docker compose down          # داده‌ها می‌مانند
-docker compose down -v       # داده‌ها هم پاک می‌شوند
-</code></pre>
-<hr>
-<h2 id="ra-پیوست-دستورهایی-که-در-ci-اجرا-می‌شوند">پیوست — دستورهایی که در CI اجرا می‌شوند</h2>
+<h2 id="ra-پیوست-د-دستورهایی-که-در-ci-اجرا-می‌شوند">پیوست د — دستورهایی که در CI اجرا می‌شوند</h2>
 <p><code>.github/workflows/platform-ci.yml</code> دقیقاً همین ترتیب را روی هر Pull Request
-اجرا می‌کند؛ پس اگر قدم‌های بالا روی ماشین شما سبز باشند، CI هم سبز است:</p>
+اجرا می‌کند؛ پس اگر گام‌های بالا روی ماشین شما سبز باشند، CI هم سبز است:</p>
 <ol>
 <li><code>npm ci</code></li>
 <li><code>npm run build:domain</code></li>
@@ -3857,7 +3978,7 @@ docker compose down -v       # داده‌ها هم پاک می‌شوند
 <li><code>npm run check:security</code></li>
 <li><code>npm test</code></li>
 <li><code>npm run build:web</code></li>
-<li>(کار مستقل) <code>python -m pytest -q</code> در <code>services/ai</code></li>
+<li><code>python -m pytest -q</code> در <code>services/ai</code></li>
 </ol>
 </div>
 
