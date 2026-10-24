@@ -6,7 +6,9 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "ir.farm.morghyar",
@@ -16,12 +18,20 @@
     },
     "android": {
       "package": "ir.farm.morghyar",
-      "permissions": ["RECORD_AUDIO", "POST_NOTIFICATIONS"],
-      "adaptiveIcon": { "backgroundColor": "#1e8a5f" }
+      "permissions": [
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#1e8a5f"
+      }
     },
-    "plugins": ["expo-notifications", "expo-secure-store"],
+    "plugins": [
+      "expo-notifications",
+      "expo-secure-store"
+    ],
     "extra": {
-      "apiUrl": "http://localhost:3000",
+      "apiUrl": "http://localhost:4000",
       "aiUrl": "http://localhost:8000"
     }
   }

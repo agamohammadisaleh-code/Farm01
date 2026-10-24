@@ -25,12 +25,14 @@ platform/
 | معماری کلی، ساختار پوشه‌ها، کد سه ماژول، طرح صفحه، نقشه راه، محدودیت‌ها و امنیت | [`docs/architecture/README.md`](./docs/architecture/README.md) |
 | طرح پایگاه‌داده (DDL تولیدشده از پایگاه‌داده واقعی) | [`docs/architecture/schema.sql`](./docs/architecture/schema.sql) |
 | مشخصات OpenAPI (تولیدشده از سرور در حال اجرا) | [`docs/architecture/openapi.yaml`](./docs/architecture/openapi.yaml) |
+| راهنمای اجرای قدم به قدم (نصب، پایگاه داده، API، وب، موبایل، AI، استقرار) | [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) |
 
-این دو فایل ماشینی‌اند و با هر تغییر کد بازتولید می‌شوند:
+`schema.sql`، `openapi.yaml` و فایل HTML با هر تغییر کد بازتولید می‌شوند:
 
 ```bash
 npm run docs:schema                                  # DDL از مهاجرت‌ها
 API_URL=http://127.0.0.1:4000 npm run docs:openapi    # از /api/docs-json
+npm run docs:html                                    # یک فایل HTML خودبسنده
 npm run check:security                               # قواعد RBAC/اعتبارسنجی/هش (در CI)
 ```
 
@@ -38,25 +40,33 @@ npm run check:security                               # قواعد RBAC/اعتب�
 
 ## اجرا
 
+> **راهنمای کامل قدم به قدم** (با خروجی مورد انتظار هر قدم و عیب‌یابی):
+> [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) — همین محتوا به‌صورت پیوست در
+> [`docs/architecture/farm-architecture.html`](./docs/architecture/farm-architecture.html) هم هست.
+
 ```bash
 cd platform
-npm install
-npm run build:domain
+npm ci
+npm run build:domain     # پیش‌نیاز API و وب
 
-# توسعه: بدون نیاز به سرور PostgreSQL (PGlite)
-npm run dev:api          # http://localhost:4000/api/v1  ·  مستندات: /api/docs
+# پایگاه داده توسعه (PGlite: بدون نصب Postgres) + داده نمونه
+export PGLITE_DATA_DIR=./.pgdata
+npm run db:migrate && npm run db:seed
 
-# تست و بررسی
-npm test                 # دامنه + API
-npm run typecheck
-npm run typecheck:mobile # اپ موبایل
+# API: http://localhost:4000/api/v1  ·  مستندات تعاملی: /api/docs
+npm run dev:api
 
-# اپ موبایل (Expo)
-npm run start:mobile     # اسکن QR با Expo Go
+# داشبورد وب: http://localhost:5173 (مسیر /api را به API پروکسی می‌کند)
+VITE_API_TARGET=http://127.0.0.1:4000 npm run dev:web
 
-# داشبورد وب
-npm run dev:web          # http://localhost:5173 (پروکسی /api به API)
+# اپ موبایل (Expo): اسکن QR با Expo Go
+npm run start:mobile
+
+# کیفیت
+npm run typecheck && npm run check:security && npm test
 ```
+
+داده نمونه: `owner@farm.ir` / `Secret1234`.
 
 برای اجرای واقعی با PostgreSQL:
 

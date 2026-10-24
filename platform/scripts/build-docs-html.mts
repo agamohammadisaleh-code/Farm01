@@ -74,6 +74,22 @@ const embedded = body.replace(/<img([^>]*?)src="(\.?\/?[^":]+)"([^>]*)>/g, (all,
   }
 });
 
+/**
+ * «راهنمای اجرا» هم به‌عنوان پیوست در همان فایل می‌آید: کسی که سند را برای
+ * همکارش می‌فرستد، معمولاً همان کسی است که باید پروژه را بالا بیاورد.
+ */
+const runbookMarkdown = read(join("..", "RUNBOOK.md"));
+const runbookRaw = marked.parse(runbookMarkdown, { async: false }) as string;
+const runSeen = new Map<string, number>();
+const runbookBody = runbookRaw
+  .replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_all, level: string, inner: string) => {
+    const base = `ra-${slugify(inner) || "بخش"}`;
+    const count = runSeen.get(base) ?? 0;
+    runSeen.set(base, count + 1);
+    return `<h${level} id="${count === 0 ? base : `${base}-${count}`}">${inner}</h${level}>`;
+  })
+  .replace(/<h1>([\s\S]*?)<\/h1>/, "<h1>$1</h1>");
+
 const schema = read("schema.sql");
 const openapi = read("openapi.yaml");
 const generatedAt = new Date().toISOString().slice(0, 10);
@@ -198,6 +214,9 @@ const html = `<!doctype html>
     page-break-inside: avoid;
   }
 
+  .runbook h1 { font-size: 1.6rem; border-bottom-width: 2px; }
+  .runbook h2 { font-size: 1.25rem; }
+
   .cover {
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -220,6 +239,9 @@ const html = `<!doctype html>
     margin: 0.6rem 0;
     page-break-inside: avoid;
   }
+
+  .runbook h1 { font-size: 1.6rem; border-bottom-width: 2px; }
+  .runbook h2 { font-size: 1.25rem; }
 
   .cover { page-break-after: always; }
     details { page-break-inside: avoid; }
@@ -253,6 +275,10 @@ ${embedded}
 <summary>نمایش OpenAPI (${openapi.split("\n").length} خط)</summary>
 <pre><code>${escapeHtml(openapi)}</code></pre>
 </details>
+
+<h2 id="پیوست-ج">پیوست ج — راهنمای اجرا (قدم به قدم)</h2>
+<p>نسخه متنی این پیوست در <code>docs/RUNBOOK.md</code> است و با همان محتوا اینجا آمده.</p>
+<div class="runbook">${runbookBody}</div>
 
 </body>
 </html>
